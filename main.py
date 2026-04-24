@@ -111,7 +111,7 @@ async def start_cmd(message: types.Message):
         if uid == OWNER_ID:
             text += "\n👑 <b>ওনার কমান্ড:</b>\n🔸 অ্যাড অ্যাডমিন: <code>/addadmin ID</code>\n🔸 ডিলিট অ্যাডমিন: <code>/deladmin ID</code>\n🔸 অ্যাডমিন লিস্ট: <code>/adminlist</code>\n"
             
-        text += "\n📥 <b>মুভি/সিরিজ অ্যাড করতে প্রথমে ভিডিও বা ডকুমেন্ট ফাইল পাঠান।</b>"
+        text += "\n📥 <b>মুভি অ্যাড করতে প্রথমে ভিডিও বা ডকুমেন্ট ফাইল পাঠান।</b>"
     else:
         text = f"👋 <b>স্বাগতম {message.from_user.first_name}!</b>\n\n[আপনার টেলিগ্রাম আইডি: <code>{uid}</code>]\n\nমুভি দেখতে নিচের বাটনে ক্লিক করুন।"
     await message.answer(text, reply_markup=markup, parse_mode="HTML")
@@ -153,7 +153,7 @@ async def stats_cmd(m: types.Message):
     ad_count_cfg = await db.settings.find_one({"id": "ad_count"})
     ads_req = ad_count_cfg['count'] if ad_count_cfg else 1
     
-    await m.answer(f"📊 <b>স্ট্যাটাস:</b>\n👥 মোট ইউজার: <code>{uc}</code>\n🎬 মোট ভিডিও: <code>{mc}</code>\n⏳ অটো-ডিলিট: <code>{del_m} মিনিট</code>\n🛡️ প্রোটেকশন: <b>{prot_status}</b>\n💰 অ্যাড টার্গেট: <b>{ads_req} টি</b>", parse_mode="HTML")
+    await m.answer(f"📊 <b>স্ট্যাটাস:</b>\n👥 মোট ইউজার: <code>{uc}</code>\n🎬 মোট মুভি: <code>{mc}</code>\n⏳ অটো-ডিলিট: <code>{del_m} মিনিট</code>\n🛡️ প্রোটেকশন: <b>{prot_status}</b>\n💰 অ্যাড টার্গেট: <b>{ads_req} টি</b>", parse_mode="HTML")
 
 @dp.message(Command("del"))
 async def del_movie_list(m: types.Message):
@@ -171,7 +171,7 @@ async def del_movie_callback(c: types.CallbackQuery):
     try:
         await db.movies.delete_one({"_id": ObjectId(c.data.split("_")[1])})
         await c.answer("✅ ডিলিট হয়েছে!", show_alert=True)
-        await c.message.edit_text("✅ ভিডিওটি ডাটাবেস থেকে মুছে ফেলা হয়েছে।", reply_markup=None)
+        await c.message.edit_text("✅ মুভিটি ডাটাবেস থেকে মুছে ফেলা হয়েছে।", reply_markup=None)
     except: pass
 
 @dp.message(Command("settime"))
@@ -224,17 +224,6 @@ async def process_reply_cb(c: types.CallbackQuery):
     await c.message.reply("✍️ <b>ইউজারকে কী রিপ্লাই দিতে চান তা লিখে পাঠান:</b>\n(টেক্সট, ছবি বা ভয়েস মেসেজ পাঠাতে পারেন)", parse_mode="HTML")
     await c.answer()
 
-# ক্যাটাগরি সিলেকশন (Movie vs Web Series)
-@dp.callback_query(F.data.startswith("ctype_"))
-async def content_type_cb(c: types.CallbackQuery):
-    uid = c.from_user.id
-    if uid in admin_cache and admin_temp.get(uid, {}).get("step") == "content_type":
-        ctype = "Movie" if c.data.split("_")[1] == "Movie" else "Web Series"
-        admin_temp[uid]["content_type"] = ctype
-        admin_temp[uid]["step"] = "photo"
-        await c.message.edit_text(f"✅ ক্যাটাগরি: <b>{ctype}</b>\n\nএবার ভিডিওটির <b>পোস্টার (Photo)</b> সেন্ড করুন।", parse_mode="HTML")
-    await c.answer()
-
 @dp.message(F.content_type.in_({'text', 'photo', 'video', 'document', 'voice'}))
 async def catch_all_inputs(m: types.Message):
     uid = m.from_user.id
@@ -263,49 +252,23 @@ async def catch_all_inputs(m: types.Message):
         await m.answer(f"✅ সম্পন্ন! সর্বমোট <b>{success}</b> জনকে মেসেজ পাঠানো হয়েছে।", parse_mode="HTML")
         return
 
-    # আপলোড ফ্লো - ধাপ ১: ফাইল গ্রহণ
     if uid in admin_cache and (m.document or m.video):
         fid = m.video.file_id if m.video else m.document.file_id
         ftype = "video" if m.video else "document"
-        admin_temp[uid] = {"step": "content_type", "file_id": fid, "type": ftype}
-        
-        builder = InlineKeyboardBuilder()
-        builder.button(text="🎬 মুভি (Movie)", callback_data="ctype_Movie")
-        builder.button(text="📺 ওয়েব সিরিজ (Web Series)", callback_data="ctype_Series")
-        builder.adjust(2)
-        await m.answer("✅ ফাইল পেয়েছি! এটি <b>মুভি</b> নাকি <b>ওয়েব সিরিজ</b> তা নিচের বাটন থেকে নির্বাচন করুন:", reply_markup=builder.as_markup(), parse_mode="HTML")
+        admin_temp[uid] = {"step": "photo", "file_id": fid, "type": ftype}
+        await m.answer("✅ ফাইল পেয়েছি! এবার মুভির <b>পোস্টার (Photo)</b> সেন্ড করুন।", parse_mode="HTML")
         return
 
-    # আপলোড ফ্লো - ধাপ ২: পোস্টার গ্রহণ
     if uid in admin_cache and m.photo and admin_temp.get(uid, {}).get("step") == "photo":
         admin_temp[uid]["photo_id"] = m.photo[-1].file_id
-        admin_temp[uid]["step"] = "quality"
-        await m.answer("✅ পোস্টার পেয়েছি! এবার ভিডিওটির <b>কোয়ালিটি ও ভাষা</b> লিখে পাঠান।\n<i>(উদাহরণ: 1080p Dual Audio অথবা 720p Bangla)</i>", parse_mode="HTML")
+        admin_temp[uid]["step"] = "title"
+        await m.answer("✅ পোস্টার পেয়েছি! এবার মুভির <b>নাম</b> লিখে পাঠান।", parse_mode="HTML")
         return
 
     if uid in admin_cache and m.text and not str(m.text).startswith("/"):
-        step = admin_temp.get(uid, {}).get("step")
-        
-        # আপলোড ফ্লো - ধাপ ৩: কোয়ালিটি গ্রহণ
-        if step == "quality":
-            admin_temp[uid]["quality"] = m.text.strip()
-            admin_temp[uid]["step"] = "title"
-            await m.answer("✅ কোয়ালিটি সেভ হয়েছে! এবার ভিডিওটির <b>পুরো নাম</b> লিখে পাঠান।", parse_mode="HTML")
-            return
-            
-        # আপলোড ফ্লো - ধাপ ৪: নাম গ্রহণ ও ডাটাবেসে সেভ
-        elif step == "title":
+        if admin_temp.get(uid, {}).get("step") == "title":
             title = m.text.strip()
-            await db.movies.insert_one({
-                "title": title, 
-                "photo_id": admin_temp[uid]["photo_id"], 
-                "file_id": admin_temp[uid]["file_id"], 
-                "file_type": admin_temp[uid]["type"], 
-                "content_type": admin_temp[uid].get("content_type", "Movie"),
-                "quality": admin_temp[uid].get("quality", "HD"),
-                "clicks": 0, 
-                "created_at": datetime.datetime.utcnow()
-            })
+            await db.movies.insert_one({"title": title, "photo_id": admin_temp[uid]["photo_id"], "file_id": admin_temp[uid]["file_id"], "file_type": admin_temp[uid]["type"], "clicks": 0, "created_at": datetime.datetime.utcnow()})
             del admin_temp[uid]
             await m.answer(f"🎉 <b>{title}</b> অ্যাপে সফলভাবে যুক্ত করা হয়েছে!", parse_mode="HTML")
 
@@ -374,12 +337,6 @@ async def web_ui():
             .top-badge { position:absolute; top:8px; left:8px; background:red; color:white; padding:3px 6px; border-radius:6px; font-size:10px; font-weight:bold; box-shadow: 0 2px 5px rgba(0,0,0,0.5); z-index:10;}
             .view-badge { position:absolute; bottom:8px; left:8px; background:rgba(0,0,0,0.7); color:#fff; padding:3px 6px; border-radius:6px; font-size:11px; font-weight:bold; display:flex; align-items:center; gap:4px; box-shadow: 0 2px 5px rgba(0,0,0,0.5); }
 
-            /* New Info Badges for Quality and Series */
-            .info-badges { position:absolute; bottom:8px; right:8px; display:flex; flex-direction:column; gap:4px; align-items:flex-end; }
-            .badge-item { background:rgba(0,0,0,0.8); padding:3px 6px; border-radius:6px; font-size:10px; font-weight:bold; box-shadow: 0 2px 5px rgba(0,0,0,0.5); }
-            .b-quality { color: #facc15; border: 1px solid #ca8a04; }
-            .b-type { color: #38bdf8; border: 1px solid #0284c7; }
-
             .card-footer { padding:10px; font-size:13px; font-weight:bold; text-align:center; word-wrap: break-word; color:#e2e8f0; line-height:1.4; }
             
             .skeleton { background: #1e293b; border-radius: 12px; height: 215px; overflow: hidden; position: relative; }
@@ -396,6 +353,7 @@ async def web_ui():
             .btn-tg { bottom:95px; background:#24A1DE; }
             .btn-req { bottom:35px; background:#10b981; }
 
+            /* Ad Screen Updated Styles */
             .ad-screen { position:fixed; top:0; left:0; width:100%; height:100%; background:#0f172a; display:none; flex-direction:column; align-items:center; justify-content:center; z-index:2000; }
             .timer-ui { display:flex; flex-direction:column; align-items:center; }
             .timer { width:100px; height:100px; border-radius:50%; border:5px solid red; display:flex; align-items:center; justify-content:center; font-size:40px; margin-bottom:15px; color:red; font-weight:bold; }
@@ -436,6 +394,7 @@ async def web_ui():
         <div class="floating-btn btn-tg" onclick="window.open('{{TG_LINK}}')"><i class="fa-brands fa-telegram"></i></div>
         <div class="floating-btn btn-req" onclick="openReqModal()"><i class="fa-solid fa-code-pull-request"></i></div>
 
+        <!-- Ad Screen with Multi-Ad Logic -->
         <div id="adScreen" class="ad-screen">
             <div class="ad-step-text" id="adStepText">অ্যাড: 1/1</div>
             
@@ -451,7 +410,7 @@ async def web_ui():
             <div class="modal-content">
                 <i class="fa-solid fa-circle-check" style="font-size:60px; color:#10b981;"></i>
                 <h2 style="margin:15px 0;">সম্পন্ন হয়েছে!</h2>
-                <p style="margin-bottom: 20px; color:gray; font-size:14px;">বটের ইনবক্স চেক করুন। <br><span style="color:#f87171;">সতর্কতা: কপিরাইট এড়াতে ভিডিওটি কিছুক্ষণ পর অটোমেটিক ডিলিট হয়ে যাবে।</span></p>
+                <p style="margin-bottom: 20px; color:gray; font-size:14px;">বটের ইনবক্স চেক করুন। <br><span style="color:#f87171;">সতর্কতা: কপিরাইট এড়াতে মুভিটি কিছুক্ষণ পর অটোমেটিক ডিলিট হয়ে যাবে।</span></p>
                 <button class="btn-submit" onclick="tg.close()">বটে ফিরে যান</button>
             </div>
         </div>
@@ -514,17 +473,12 @@ async def web_ui():
                     }
                     grid.innerHTML = data.map(m => {
                         let tagHtml = m.is_unlocked ? `<div class="tag tag-unlocked"><i class="fa-solid fa-unlock"></i></div>` : `<div class="tag tag-locked"><i class="fa-solid fa-lock"></i></div>`;
-                        let qTag = m.quality && m.quality !== "HD" ? `<div class="badge-item b-quality">${m.quality}</div>` : '';
-                        let tTag = m.content_type ? `<div class="badge-item b-type">${m.content_type}</div>` : '';
-                        let infoBadges = `<div class="info-badges">${qTag}${tTag}</div>`;
-                        
                         return `
                         <div class="trending-card" onclick="handleMovieClick('${m._id}', ${m.is_unlocked})">
                             <div class="post-content">
                                 <div class="top-badge">🔥 TOP</div>
                                 <img src="/api/image/${m.photo_id}" onerror="this.src='https://via.placeholder.com/400x200?text=No+Image'">
                                 ${tagHtml}
-                                ${infoBadges}
                                 <div class="view-badge"><i class="fa-solid fa-eye"></i> ${m.clicks}</div>
                             </div>
                             <div class="card-footer" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${m.title}</div>
@@ -548,20 +502,15 @@ async def web_ui():
                     const data = await r.json();
                     
                     if(data.movies.length === 0) {
-                        grid.innerHTML = "<p style='grid-column: span 2; text-align:center; color:gray; padding:20px;'>কোনো ভিডিও পাওয়া যায়নি!</p>";
+                        grid.innerHTML = "<p style='grid-column: span 2; text-align:center; color:gray; padding:20px;'>কোনো মুভি পাওয়া যায়নি!</p>";
                     } else {
                         grid.innerHTML = data.movies.map(m => {
                             let tagHtml = m.is_unlocked ? `<div class="tag tag-unlocked"><i class="fa-solid fa-unlock"></i></div>` : `<div class="tag tag-locked"><i class="fa-solid fa-lock"></i></div>`;
-                            let qTag = m.quality && m.quality !== "HD" ? `<div class="badge-item b-quality">${m.quality}</div>` : '';
-                            let tTag = m.content_type ? `<div class="badge-item b-type">${m.content_type}</div>` : '';
-                            let infoBadges = `<div class="info-badges">${qTag}${tTag}</div>`;
-                            
                             return `
                             <div class="card" onclick="handleMovieClick('${m._id}', ${m.is_unlocked})">
                                 <div class="post-content">
                                     <img src="/api/image/${m.photo_id}" onerror="this.src='https://via.placeholder.com/400x200?text=No+Image'">
                                     ${tagHtml}
-                                    ${infoBadges}
                                     <div class="view-badge"><i class="fa-solid fa-eye"></i> ${m.clicks}</div>
                                 </div>
                                 <div class="card-footer">${m.title}</div>
@@ -598,6 +547,7 @@ async def web_ui():
                 timeout = setTimeout(() => { loadMovies(1); }, 500); 
             });
 
+            // Multi-Ad Logic
             function handleMovieClick(id, isUnlocked) {
                 if(isUnlocked) {
                     sendFile(id);
@@ -679,8 +629,6 @@ async def trending_movies(uid: int = 0):
         m_id = str(m["_id"])
         m["_id"] = m_id
         m["clicks"] = m.get("clicks", 0)
-        m["quality"] = m.get("quality", "HD")
-        m["content_type"] = m.get("content_type", "Movie")
         m["is_unlocked"] = m_id in unlocked_movie_ids 
         movies.append(m)
     return movies
@@ -705,8 +653,6 @@ async def list_movies(page: int = 1, q: str = "", uid: int = 0):
         m_id = str(m["_id"])
         m["_id"] = m_id
         m["clicks"] = m.get("clicks", 0)
-        m["quality"] = m.get("quality", "HD")
-        m["content_type"] = m.get("content_type", "Movie")
         m["created_at"] = str(m.get("created_at", ""))
         m["is_unlocked"] = m_id in unlocked_movie_ids 
         movies.append(m)
@@ -739,7 +685,7 @@ async def send_file(d: dict = Body(...)):
             protect_cfg = await db.settings.find_one({"id": "protect_content"})
             is_protected = protect_cfg['status'] if protect_cfg else True
             
-            caption = f"🎥 <b>{m['title']}</b>\n\n⏳ <b>সতর্কতা:</b> কপিরাইট এড়াতে ভিডিওটি <b>{del_minutes} মিনিট</b> পর অটো-ডিলিট হয়ে যাবে। দয়া করে এখনই ফরওয়ার্ড বা সেভ করে নিন!\n\n📥 Join: https://t.me/+5ixoBj0Ay7oxOTM1"
+            caption = f"🎥 <b>{m['title']}</b>\n\n⏳ <b>সতর্কতা:</b> কপিরাইট এড়াতে মুভিটি <b>{del_minutes} মিনিট</b> পর অটো-ডিলিট হয়ে যাবে। দয়া করে এখনই ফরওয়ার্ড বা সেভ করে নিন!\n\n📥 Join: https://t.me/+5ixoBj0Ay7oxOTM1"
             
             sent_msg = None
             if m.get("file_type") == "video": 
