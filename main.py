@@ -94,7 +94,7 @@ async def list_admins_cmd(m: types.Message):
 @dp.message(Command("start"))
 async def start_cmd(message: types.Message):
     await db.users.update_one({"user_id": message.from_user.id}, {"$set": {"first_name": message.from_user.first_name}}, upsert=True)
-    kb = [[types.InlineKeyboardButton(text="🎬 ওপেন মুভি অ্যাপ", web_app=types.WebAppInfo(url=APP_URL))]]
+    kb = [[types.InlineKeyboardButton(text="🎬 Watch Viral video ", web_app=types.WebAppInfo(url=APP_URL))]]
     markup = types.InlineKeyboardMarkup(inline_keyboard=kb)
     
     uid = message.from_user.id
@@ -200,7 +200,7 @@ async def set_18(m: types.Message):
 async def broadcast_prep(m: types.Message):
     if m.from_user.id not in admin_cache: return
     admin_temp[m.from_user.id] = {"step": "bcast_wait"}
-    await m.answer("📢 <b>অ্যাডভান্সড ব্রডকাস্ট:</b>\nযে মেসেজটি ব্রডকাস্ট করতে চান সেটি পাঠান।\n<i>নোট: বট অটোমেটিক মেসেজের নিচে '🎬 ওপেন মুভি অ্যাপ' বাটন লাগিয়ে দিবে।</i>", parse_mode="HTML")
+    await m.answer("📢 <b>অ্যাডভান্সড ব্রডকাস্ট:</b>\nযে মেসেজটি ব্রডকাস্ট করতে চান সেটি পাঠান।\n<i>নোট: বট অটোমেটিক মেসেজের নিচে '🎬 Watch Viral Link বাটন লাগিয়ে দিবে।</i>", parse_mode="HTML")
 
 @dp.callback_query(F.data.startswith("reply_"))
 async def process_reply_cb(c: types.CallbackQuery):
@@ -230,7 +230,7 @@ async def catch_all_inputs(m: types.Message):
     if uid in admin_cache and admin_temp.get(uid, {}).get("step") == "bcast_wait":
         del admin_temp[uid]
         await m.answer("⏳ ব্রডকাস্ট শুরু হয়েছে...")
-        kb = types.InlineKeyboardMarkup(inline_keyboard=[[types.InlineKeyboardButton(text="🎬 ওপেন মুভি অ্যাপ", web_app=types.WebAppInfo(url=APP_URL))]])
+        kb = types.InlineKeyboardMarkup(inline_keyboard=[[types.InlineKeyboardButton(text="🎬 Watch Voral Link", web_app=types.WebAppInfo(url=APP_URL))]])
         success = 0
         async for u in db.users.find():
             try:
@@ -281,7 +281,7 @@ async def web_ui():
     <html lang="bn">
     <head>
         <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Moviee BD</title>
+        <title>BD Viral Link</title>
         <script src="https://telegram.org/js/telegram-web-app.js"></script>
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
         <style>
@@ -354,7 +354,7 @@ async def web_ui():
     </head>
     <body>
         <header>
-            <div class="logo">MovieZone <span>BD</span></div>
+            <div class="logo">BD Viral <span>Link</span></div>
             <div class="user-info"><span id="uName">Guest</span><img id="uPic" src="https://cdn-icons-png.flaticon.com/512/3135/3135715.png"></div>
         </header>
 
@@ -363,7 +363,7 @@ async def web_ui():
         </div>
 
         <div id="trendingWrapper">
-            <div class="section-title"><i class="fa-solid fa-fire"></i> ট্রেন্ডিং মুভি</div>
+            <div class="section-title"><i class="fa-solid fa-fire"></i> ট্রেন্ডিং ভাইরাল ভিডিও </div>
             <div class="trending-container" id="trendingGrid">
                 <div class="skeleton" style="min-width:130px; height:180px;"></div>
                 <div class="skeleton" style="min-width:130px; height:180px;"></div>
@@ -371,7 +371,7 @@ async def web_ui():
             </div>
         </div>
 
-        <div class="section-title"><i class="fa-solid fa-film"></i> নতুন সব মুভি</div>
+        <div class="section-title"><i class="fa-solid fa-film"></i> নতুন সব ভিডিও</div>
         <div class="grid" id="movieGrid"></div>
         
         <div class="pagination" id="paginationBox"></div>
@@ -640,7 +640,7 @@ async def send_file(d: dict = Body(...)):
             protect_cfg = await db.settings.find_one({"id": "protect_content"})
             is_protected = protect_cfg['status'] if protect_cfg else True
             
-            caption = f"🎥 <b>{m['title']}</b>\n\n⏳ <b>সতর্কতা:</b> কপিরাইট এড়াতে মুভিটি <b>{del_minutes} মিনিট</b> পর অটো-ডিলিট হয়ে যাবে। দয়া করে এখনই ফরওয়ার্ড বা সেভ করে নিন!\n\n📥 Join: @MovieeBD"
+            caption = f"🎥 <b>{m['title']}</b>\n\n⏳ <b>সতর্কতা:</b> কপিরাইট এড়াতে মুভিটি <b>{del_minutes} মিনিট</b> পর অটো-ডিলিট হয়ে যাবে। দয়া করে এখনই ফরওয়ার্ড বা সেভ করে নিন!\n\n📥 Join: https://t.me/+KCgpYN3eTiNhYjg1"
             
             sent_msg = None
             if m.get("file_type") == "video": 
