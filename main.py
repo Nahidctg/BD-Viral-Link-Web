@@ -16,8 +16,9 @@ TOKEN = os.getenv("BOT_TOKEN")
 MONGO_URL = os.getenv("MONGO_URI")
 OWNER_ID = int(os.getenv("ADMIN_ID", "0"))
 APP_URL = os.getenv("APP_URL")
+
 # আপনার চ্যানেলের আইডি নিচে দিন অথবা Environment Variable (CHANNEL_ID) থেকে সেট করুন
-CHANNEL_ID = os.getenv("CHANNEL_ID", "-100XXXXXXXXXX") 
+CHANNEL_ID = os.getenv("CHANNEL_ID", "-1003655443965") 
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
@@ -136,7 +137,7 @@ async def protect_cmd(m: types.Message):
         state = m.text.split(" ")[1].lower()
         if state == "on":
             await db.settings.update_one({"id": "protect_content"}, {"$set": {"status": True}}, upsert=True)
-            await m.answer("✅ ফরোয়ার্ড প্রোটেকশন <b>চালু (ON)</b> করা হয়েছে। এখন কেউ মুভি ফরোয়ার্ড বা সেভ করতে পারবে না।", parse_mode="HTML")
+            await m.answer("✅ ফরোয়ার্ড প্রোটেকশন <b>চালু (ON)</b> করা হয়েছে। এখন কেউ মুভি ফরোয়ার্ড বা সেভ করতে পারবে উল্লেখযোগ্য।", parse_mode="HTML")
         elif state == "off":
             await db.settings.update_one({"id": "protect_content"}, {"$set": {"status": False}}, upsert=True)
             await m.answer("✅ ফরোয়ার্ড প্রোটেকশন <b>বন্ধ (OFF)</b> করা হয়েছে। এখন সবাই মুভি ফরোয়ার্ড করতে পারবে।", parse_mode="HTML")
@@ -290,6 +291,12 @@ async def catch_all_inputs(m: types.Message):
             # চ্যানেলে নোটিফিকেশন পাঠানো
             if CHANNEL_ID and CHANNEL_ID != "-100XXXXXXXXXX":
                 try:
+                    # চ্যানেল আইডিটি String থেকে Integer এ কনভার্ট করা হলো যাতে এরর না আসে
+                    try:
+                        target_channel = int(CHANNEL_ID)
+                    except ValueError:
+                        target_channel = CHANNEL_ID
+
                     kb = [[types.InlineKeyboardButton(text="🎬 ওপেন মুভি অ্যাপ", web_app=types.WebAppInfo(url=APP_URL))]]
                     markup = types.InlineKeyboardMarkup(inline_keyboard=kb)
                     
@@ -300,14 +307,15 @@ async def catch_all_inputs(m: types.Message):
                     )
                     
                     await bot.send_photo(
-                        chat_id=CHANNEL_ID, 
+                        chat_id=target_channel, 
                         photo=photo_id, 
                         caption=caption, 
                         parse_mode="HTML", 
                         reply_markup=markup
                     )
                 except Exception as e:
-                    await m.answer("⚠️ মুভি ডাটাবেসে যুক্ত হয়েছে, কিন্তু চ্যানেলে নোটিফিকেশন পাঠানো যায়নি! (বটটি কি আপনার চ্যানেলে অ্যাডমিন করা আছে?)")
+                    # এবার চ্যানেলে মেসেজ না গেলে কী কারণে যায়নি সেটা আপনাকে রিপ্লাইতে স্পষ্ট বলে দিবে
+                    await m.answer(f"⚠️ মুভি ডাটাবেসে যুক্ত হয়েছে, কিন্তু চ্যানেলে যায়নি!\n<b>কারণ:</b> <code>{str(e)}</code>", parse_mode="HTML")
 
 # ==========================================
 # ৪. ওয়েব অ্যাপ UI এবং APIs
