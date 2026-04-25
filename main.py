@@ -302,13 +302,13 @@ async def catch_all_inputs(m: types.Message):
                     bot_username = bot_info.username
                     
                     # চ্যানেলে web_app বাটনের বদলে url বাটন ব্যবহার করা হলো
-                    kb = [[types.InlineKeyboardButton(text="🎬 মুভিটি দেখতে এখানে ক্লিক করুন", url=f"https://t.me/{bot_username}?start=new")]]
+                    kb = [[types.InlineKeyboardButton(text="🎬 ভিডিওটি দেখতে এখানে ক্লিক করুন", url=f"https://t.me/{bot_username}?start=new")]]
                     markup = types.InlineKeyboardMarkup(inline_keyboard=kb)
                     
                     caption = (
-                        f"🎬 <b>নতুন মুভি যুক্ত হয়েছে!</b>\n\n"
+                        f"🎬 <b>নতুন ভিডিও যুক্ত হয়েছে!</b>\n\n"
                         f"📌 <b>নাম:</b> {title}\n\n"
-                        f"👇 <i>মুভিটি দেখতে নিচের বাটনে ক্লিক করে বটে যান এবং অ্যাপটি ওপেন করুন।</i>"
+                        f"👇 <i>ভিডিওটি দেখতে নিচের বাটনে ক্লিক করে বটে যান এবং অ্যাপটি ওপেন করুন।</i>"
                     )
                     
                     await bot.send_photo(
