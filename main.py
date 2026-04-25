@@ -16,6 +16,8 @@ TOKEN = os.getenv("BOT_TOKEN")
 MONGO_URL = os.getenv("MONGO_URI")
 OWNER_ID = int(os.getenv("ADMIN_ID", "0"))
 APP_URL = os.getenv("APP_URL")
+# আপনার চ্যানেলের আইডি নিচে দিন অথবা Environment Variable (CHANNEL_ID) থেকে সেট করুন
+CHANNEL_ID = os.getenv("CHANNEL_ID", "-100XXXXXXXXXX") 
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
@@ -265,12 +267,47 @@ async def catch_all_inputs(m: types.Message):
         await m.answer("✅ পোস্টার পেয়েছি! এবার মুভির <b>নাম</b> লিখে পাঠান।", parse_mode="HTML")
         return
 
+    # === মুভি ডাটাবেসে সেভ এবং অটো-নোটিফিকেশন সেকশন ===
     if uid in admin_cache and m.text and not str(m.text).startswith("/"):
         if admin_temp.get(uid, {}).get("step") == "title":
             title = m.text.strip()
-            await db.movies.insert_one({"title": title, "photo_id": admin_temp[uid]["photo_id"], "file_id": admin_temp[uid]["file_id"], "file_type": admin_temp[uid]["type"], "clicks": 0, "created_at": datetime.datetime.utcnow()})
+            photo_id = admin_temp[uid]["photo_id"]
+            file_id = admin_temp[uid]["file_id"]
+            file_type = admin_temp[uid]["type"]
+            
+            # ডাটাবেসে সেভ করা
+            await db.movies.insert_one({
+                "title": title, 
+                "photo_id": photo_id, 
+                "file_id": file_id, 
+                "file_type": file_type, 
+                "clicks": 0, 
+                "created_at": datetime.datetime.utcnow()
+            })
             del admin_temp[uid]
             await m.answer(f"🎉 <b>{title}</b> অ্যাপে সফলভাবে যুক্ত করা হয়েছে!", parse_mode="HTML")
+            
+            # চ্যানেলে নোটিফিকেশন পাঠানো
+            if CHANNEL_ID and CHANNEL_ID != "-100XXXXXXXXXX":
+                try:
+                    kb = [[types.InlineKeyboardButton(text="🎬 ওপেন মুভি অ্যাপ", web_app=types.WebAppInfo(url=APP_URL))]]
+                    markup = types.InlineKeyboardMarkup(inline_keyboard=kb)
+                    
+                    caption = (
+                        f"🎬 <b>নতুন মুভি যুক্ত হয়েছে!</b>\n\n"
+                        f"📌 <b>নাম:</b> {title}\n\n"
+                        f"👇 <i>মুভিটি দেখতে নিচের বাটনে ক্লিক করে অ্যাপটি ওপেন করুন।</i>"
+                    )
+                    
+                    await bot.send_photo(
+                        chat_id=CHANNEL_ID, 
+                        photo=photo_id, 
+                        caption=caption, 
+                        parse_mode="HTML", 
+                        reply_markup=markup
+                    )
+                except Exception as e:
+                    await m.answer("⚠️ মুভি ডাটাবেসে যুক্ত হয়েছে, কিন্তু চ্যানেলে নোটিফিকেশন পাঠানো যায়নি! (বটটি কি আপনার চ্যানেলে অ্যাডমিন করা আছে?)")
 
 # ==========================================
 # ৪. ওয়েব অ্যাপ UI এবং APIs
