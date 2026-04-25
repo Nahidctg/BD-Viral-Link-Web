@@ -75,7 +75,7 @@ async def del_admin_cmd(m: types.Message):
     if m.from_user.id != OWNER_ID: return
     try:
         del_admin = int(m.text.split()[1])
-        if del_admin == OWNER_ID: return await m.answer("⚠️ আপনি নিজেকে (Owner) ডিলিট করতে পারবেন না!")
+        if del_admin == OWNER_ID: return await m.answer("⚠️ আপনি নিজেকে (Owner) ডিলিট করতে পারবেন অ্যাকাউন্টের!")
         await db.admins.delete_one({"user_id": del_admin})
         admin_cache.discard(del_admin)
         await m.answer(f"✅ অ্যাডমিন রিমুভ করা হয়েছে: <code>{del_admin}</code>", parse_mode="HTML")
@@ -137,7 +137,7 @@ async def protect_cmd(m: types.Message):
         state = m.text.split(" ")[1].lower()
         if state == "on":
             await db.settings.update_one({"id": "protect_content"}, {"$set": {"status": True}}, upsert=True)
-            await m.answer("✅ ফরোয়ার্ড প্রোটেকশন <b>চালু (ON)</b> করা হয়েছে। এখন কেউ মুভি ফরোয়ার্ড বা সেভ করতে পারবে উল্লেখযোগ্য।", parse_mode="HTML")
+            await m.answer("✅ ফরোয়ার্ড প্রোটেকশন <b>চালু (ON)</b> করা হয়েছে। এখন কেউ মুভি ফরোয়ার্ড বা সেভ করতে পারবে না।", parse_mode="HTML")
         elif state == "off":
             await db.settings.update_one({"id": "protect_content"}, {"$set": {"status": False}}, upsert=True)
             await m.answer("✅ ফরোয়ার্ড প্রোটেকশন <b>বন্ধ (OFF)</b> করা হয়েছে। এখন সবাই মুভি ফরোয়ার্ড করতে পারবে।", parse_mode="HTML")
@@ -297,13 +297,18 @@ async def catch_all_inputs(m: types.Message):
                     except ValueError:
                         target_channel = CHANNEL_ID
 
-                    kb = [[types.InlineKeyboardButton(text="🎬 ওপেন মুভি অ্যাপ", web_app=types.WebAppInfo(url=APP_URL))]]
+                    # বটের ইউজারনেম বের করা হচ্ছে
+                    bot_info = await bot.get_me()
+                    bot_username = bot_info.username
+                    
+                    # চ্যানেলে web_app বাটনের বদলে url বাটন ব্যবহার করা হলো
+                    kb = [[types.InlineKeyboardButton(text="🎬 মুভিটি দেখতে এখানে ক্লিক করুন", url=f"https://t.me/{bot_username}?start=new")]]
                     markup = types.InlineKeyboardMarkup(inline_keyboard=kb)
                     
                     caption = (
                         f"🎬 <b>নতুন মুভি যুক্ত হয়েছে!</b>\n\n"
                         f"📌 <b>নাম:</b> {title}\n\n"
-                        f"👇 <i>মুভিটি দেখতে নিচের বাটনে ক্লিক করে অ্যাপটি ওপেন করুন।</i>"
+                        f"👇 <i>মুভিটি দেখতে নিচের বাটনে ক্লিক করে বটে যান এবং অ্যাপটি ওপেন করুন।</i>"
                     )
                     
                     await bot.send_photo(
