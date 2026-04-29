@@ -444,58 +444,37 @@ async def web_ui():
                 width: 100%; max-width: 400px;
                 background: #0f172a;
                 border-radius: 20px;
-                padding: 2px; /* Border thickness */
+                padding: 2px;
                 z-index: 1;
             }
             .rgb-wrapper::before {
-                content: '';
-                position: absolute;
-                top: 0; left: 0; right: 0; bottom: 0;
+                content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0;
                 background: linear-gradient(45deg, #ff0000, #ff7300, #fffb00, #48ff00, #00ffd5, #002bff, #7a00ff, #ff00c8, #ff0000);
-                background-size: 400%;
-                z-index: -1;
-                border-radius: 20px;
-                animation: glowing 10s linear infinite;
+                background-size: 400%; z-index: -1; border-radius: 20px; animation: glowing 10s linear infinite;
             }
             .rgb-content {
-                background: #0f172a; /* Inner background */
-                border-radius: 18px;
-                padding: 30px 20px;
-                text-align: center;
-                box-shadow: inset 0 0 20px rgba(0,0,0,0.8);
+                background: #0f172a; border-radius: 18px; padding: 30px 20px; text-align: center; box-shadow: inset 0 0 20px rgba(0,0,0,0.8);
             }
             .rgb-title {
-                font-size: 22px;
-                font-weight: bold;
+                font-size: 22px; font-weight: bold; margin-bottom: 15px;
                 background: -webkit-linear-gradient(45deg, #f87171, #fbbf24);
-                -webkit-background-clip: text;
-                -webkit-text-fill-color: transparent;
-                margin-bottom: 15px;
+                -webkit-background-clip: text; -webkit-text-fill-color: transparent;
             }
-            .rgb-text {
-                font-size: 16px; color: #cbd5e1; line-height: 1.5; margin-bottom: 25px;
-            }
-            .rgb-text span {
-                color: #00ffd5; font-weight: bold;
-            }
+            .rgb-text { font-size: 16px; color: #cbd5e1; line-height: 1.5; margin-bottom: 25px; }
+            .rgb-text span { color: #00ffd5; font-weight: bold; }
+            
             .btn-click-here {
+                display: block; box-sizing: border-box; text-decoration: none;
                 background: linear-gradient(90deg, #ff007f, #7928ca);
                 color: white; font-size: 22px; font-weight: bold;
                 padding: 15px; width: 100%; border: none; border-radius: 30px;
-                cursor: pointer;
+                text-align: center; cursor: pointer;
                 box-shadow: 0 0 15px rgba(255, 0, 127, 0.6);
-                animation: pulse 1.5s infinite;
-                transition: 0.3s;
+                animation: pulse 1.5s infinite; transition: 0.3s;
             }
             .btn-click-here:active { transform: scale(0.95); }
-            @keyframes pulse {
-                0% { box-shadow: 0 0 10px rgba(255,0,127,0.5); }
-                50% { box-shadow: 0 0 25px rgba(255,0,127,1); }
-                100% { box-shadow: 0 0 10px rgba(255,0,127,0.5); }
-            }
-            .timer-text {
-                display: none; font-size: 18px; color: #fff; background: #1e293b; padding: 15px; border-radius: 15px; border: 1px solid #334155;
-            }
+            @keyframes pulse { 0% { box-shadow: 0 0 10px rgba(255,0,127,0.5); } 50% { box-shadow: 0 0 25px rgba(255,0,127,1); } 100% { box-shadow: 0 0 10px rgba(255,0,127,0.5); } }
+            .timer-text { display: none; font-size: 18px; color: #fff; background: #1e293b; padding: 15px; border-radius: 15px; border: 1px solid #334155; }
         </style>
     </head>
     <body>
@@ -521,8 +500,9 @@ async def web_ui():
         <div class="grid" id="movieGrid"></div>
         <div class="pagination" id="paginationBox"></div>
 
-        <div class="floating-btn btn-18" onclick="openSafeLink('{{LINK_18}}')">18+</div>
-        <div class="floating-btn btn-tg" onclick="openSafeLink('{{TG_LINK}}')"><i class="fa-brands fa-telegram"></i></div>
+        <!-- 100% Safe Native HTML Anchor Tags -->
+        <a href="{{LINK_18}}" target="_blank" class="floating-btn btn-18" style="text-decoration:none;">18+</a>
+        <a href="{{TG_LINK}}" target="_blank" class="floating-btn btn-tg" style="text-decoration:none;"><i class="fa-brands fa-telegram"></i></a>
         <div class="floating-btn btn-req" onclick="openReqModal()"><i class="fa-solid fa-code-pull-request"></i></div>
 
         <!-- RGB Direct Link Modal -->
@@ -533,7 +513,8 @@ async def web_ui():
                     <p class="rgb-text">
                         এই ভিডিওটি আনলক করতে হলে নিচের <span>Click Here</span> বাটনে ক্লিক করে <span>১৫ সেকেন্ড</span> অপেক্ষা করে আবার ব্যাক করুন।<br><br>সাথে সাথে ভিডিও আপনার টেলিগ্রাম ইনবক্সে চলে যাবে!
                     </p>
-                    <button class="btn-click-here" id="dlBtn" onclick="onDirectLinkClick()">👉 CLICK HERE 👈</button>
+                    <!-- 100% Native HTML Anchor Tag (No JavaScript Routing for the link) -->
+                    <a id="dlBtn" class="btn-click-here" target="_blank" onclick="startTimerOnly()">👉 CLICK HERE 👈</a>
                     <div class="timer-text" id="dlTimer"></div>
                 </div>
             </div>
@@ -561,7 +542,7 @@ async def web_ui():
 
         <script>
             let tg = window.Telegram.WebApp; tg.expand();
-            const DIRECT_LINKS = {{DIRECT_LINKS}}; // Injected Array
+            const DIRECT_LINKS = {{DIRECT_LINKS}}; 
             
             let currentPage = 1; let isLoading = false; let searchQuery = "";
             let uid = tg.initDataUnsafe.user?.id || 0;
@@ -570,18 +551,6 @@ async def web_ui():
             if(tg.initDataUnsafe && tg.initDataUnsafe.user) {
                 document.getElementById('uName').innerText = tg.initDataUnsafe.user.first_name;
                 if(tg.initDataUnsafe.user.photo_url) document.getElementById('uPic').src = tg.initDataUnsafe.user.photo_url;
-            }
-
-            // Safe External Link Opener for Telegram Mini Apps
-            function openSafeLink(url) {
-                if (!url.startsWith('http://') && !url.startsWith('https://')) {
-                    url = 'https://' + url;
-                }
-                try {
-                    tg.openLink(url);
-                } catch(e) {
-                    window.open(url, '_blank');
-                }
             }
 
             function drawSkeletons(count) {
@@ -687,38 +656,44 @@ async def web_ui():
                 timeout = setTimeout(() => { loadMovies(1); }, 500); 
             });
 
-            // --- Direct Link RGB Popup Logic ---
+            // --- Direct Link Logic with Native Anchor Tag ---
             function handleMovieClick(id, isUnlocked) {
                 if(isUnlocked) {
                     sendFile(id);
                 } else {
                     activeMovieId = id;
+                    
+                    // এখানে লটারির মতো র‍্যান্ডম লিংক সেট করা হচ্ছে
+                    let link = "https://google.com";
+                    if(DIRECT_LINKS && DIRECT_LINKS.length > 0) {
+                        link = DIRECT_LINKS[Math.floor(Math.random() * DIRECT_LINKS.length)];
+                    }
+                    if (!link.startsWith('http')) {
+                        link = 'https://' + link;
+                    }
+                    
+                    // বাটনটিতে লিংক সেট করে দেওয়া হলো, ফলে ক্লিক করলে ফোনের ব্রাউজারে সুন্দরভাবে খুলবে
+                    let btn = document.getElementById('dlBtn');
+                    btn.href = link;
+                    
                     document.getElementById('dlModal').style.display = 'flex';
-                    document.getElementById('dlBtn').style.display = 'block';
+                    btn.style.display = 'block';
                     document.getElementById('dlTimer').style.display = 'none';
                 }
             }
 
-            function onDirectLinkClick() {
-                let link = "https://google.com"; // Default
-                if(DIRECT_LINKS && DIRECT_LINKS.length > 0) {
-                    link = DIRECT_LINKS[Math.floor(Math.random() * DIRECT_LINKS.length)];
-                }
-                
-                // টেলিগ্রামের অফিসিয়াল API দিয়ে লিংক ওপেন করা
-                openSafeLink(link);
-                
+            function startTimerOnly() {
                 // বাটন হাইড করে টাইমার শো করা
                 document.getElementById('dlBtn').style.display = 'none';
                 let timerEl = document.getElementById('dlTimer');
                 timerEl.style.display = 'block';
                 
                 let t = 15;
-                timerEl.innerHTML = `অপেক্ষা করুন... <b><span style="color:#00ffd5; font-size:24px;">${t}</span></b> সেকেন্ড`;
+                timerEl.innerHTML = `অপেক্ষা করুন... <br><br><b><span style="color:#00ffd5; font-size:32px;">${t}</span></b><br><br> সেকেন্ড`;
                 
                 let iv = setInterval(() => {
                     t--;
-                    timerEl.innerHTML = `অপেক্ষা করুন... <b><span style="color:#00ffd5; font-size:24px;">${t}</span></b> সেকেন্ড`;
+                    timerEl.innerHTML = `অপেক্ষা করুন... <br><br><b><span style="color:#00ffd5; font-size:32px;">${t}</span></b><br><br> সেকেন্ড`;
                     if(t <= 0) { 
                         clearInterval(iv); 
                         document.getElementById('dlModal').style.display = 'none';
