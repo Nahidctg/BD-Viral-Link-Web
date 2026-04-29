@@ -1,4 +1,4 @@
-import os, asyncio, datetime, uvicorn, json
+import os, asyncio, datetime, uvicorn, json, random
 import aiohttp
 from fastapi import FastAPI, Body, Request
 from fastapi.responses import HTMLResponse, StreamingResponse
@@ -354,19 +354,58 @@ async def catch_all_inputs(m: types.Message):
                 except Exception as e:
                     await m.answer(f"⚠️ মুভি ডাটাবেসে যুক্ত হয়েছে, কিন্তু চ্যানেলে যায়নি!\n<b>কারণ:</b> <code>{str(e)}</code>", parse_mode="HTML")
 
+
 # ==========================================
 # ৪. ওয়েব অ্যাপ UI এবং APIs
 # ==========================================
+
+# --- নতুন রিডাইরেক্ট API (এরর ফিক্স করার জন্য) ---
+@app.get("/api/ad")
+async def secure_ad_redirect():
+    data = await db.settings.find_one({"id": "direct_links"})
+    links = data.get("links", ["https://google.com"]) if data else ["https://google.com"]
+    if not links: links = ["https://google.com"]
+    
+    # লটারির মতো র‍্যান্ডম লিংক বাছাই
+    chosen_link = random.choice(links)
+    if not chosen_link.startswith("http"):
+        chosen_link = "https://" + chosen_link
+
+    # এইচটিএমএল পেজের মাধ্যমে রিডাইরেক্ট, এতে টেলিগ্রাম ব্লক করবে না
+    html = f"""
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta http-equiv="refresh" content="0;url={chosen_link}">
+        <title>Loading...</title>
+        <script>
+            setTimeout(function() {{
+                window.location.href = "{chosen_link}";
+            }}, 100);
+        </script>
+        <style>
+            body {{ background: #0f172a; color: white; display: flex; justify-content: center; align-items: center; height: 100vh; font-family: sans-serif; }}
+            .loader {{ border: 8px solid #1e293b; border-top: 8px solid #00ffd5; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; }}
+            @keyframes spin {{ 0% {{ transform: rotate(0deg); }} 100% {{ transform: rotate(360deg); }} }}
+        </style>
+    </head>
+    <body>
+        <div><div class="loader"></div><p style="margin-top:20px;">অপেক্ষা করুন...</p></div>
+    </body>
+    </html>
+    """
+    return HTMLResponse(content=html)
+
 
 @app.get("/", response_class=HTMLResponse)
 async def web_ui():
     tg_cfg = await db.settings.find_one({"id": "link_tg"})
     b18_cfg = await db.settings.find_one({"id": "link_18"})
-    dl_cfg = await db.settings.find_one({"id": "direct_links"})
     
     tg_url = tg_cfg['url'] if tg_cfg else "https://t.me/MovieeBD"
     link_18 = b18_cfg['url'] if b18_cfg else "https://t.me/MovieeBD"
-    direct_links = dl_cfg.get("links", ["https://google.com"]) if dl_cfg else ["https://google.com"]
 
     html_code = r"""
     <!DOCTYPE html>
@@ -464,11 +503,11 @@ async def web_ui():
             .rgb-text span { color: #00ffd5; font-weight: bold; }
             
             .btn-click-here {
-                display: block; box-sizing: border-box; text-decoration: none;
+                display: block; width: 100%;
                 background: linear-gradient(90deg, #ff007f, #7928ca);
                 color: white; font-size: 22px; font-weight: bold;
-                padding: 15px; width: 100%; border: none; border-radius: 30px;
-                text-align: center; cursor: pointer;
+                padding: 15px; border: none; border-radius: 30px;
+                cursor: pointer;
                 box-shadow: 0 0 15px rgba(255, 0, 127, 0.6);
                 animation: pulse 1.5s infinite; transition: 0.3s;
             }
@@ -500,9 +539,8 @@ async def web_ui():
         <div class="grid" id="movieGrid"></div>
         <div class="pagination" id="paginationBox"></div>
 
-        <!-- 100% Safe Native HTML Anchor Tags -->
-        <a href="{{LINK_18}}" target="_blank" class="floating-btn btn-18" style="text-decoration:none;">18+</a>
-        <a href="{{TG_LINK}}" target="_blank" class="floating-btn btn-tg" style="text-decoration:none;"><i class="fa-brands fa-telegram"></i></a>
+        <div class="floating-btn btn-18" onclick="openSafeLink('{{LINK_18}}')">18+</div>
+        <div class="floating-btn btn-tg" onclick="openSafeLink('{{TG_LINK}}')"><i class="fa-brands fa-telegram"></i></div>
         <div class="floating-btn btn-req" onclick="openReqModal()"><i class="fa-solid fa-code-pull-request"></i></div>
 
         <!-- RGB Direct Link Modal -->
@@ -513,8 +551,7 @@ async def web_ui():
                     <p class="rgb-text">
                         এই ভিডিওটি আনলক করতে হলে নিচের <span>Click Here</span> বাটনে ক্লিক করে <span>১৫ সেকেন্ড</span> অপেক্ষা করে আবার ব্যাক করুন।<br><br>সাথে সাথে ভিডিও আপনার টেলিগ্রাম ইনবক্সে চলে যাবে!
                     </p>
-                    <!-- 100% Native HTML Anchor Tag (No JavaScript Routing for the link) -->
-                    <a id="dlBtn" class="btn-click-here" target="_blank" onclick="startTimerOnly()">👉 CLICK HERE 👈</a>
+                    <button id="dlBtn" class="btn-click-here" onclick="onDirectLinkClick()">👉 CLICK HERE 👈</button>
                     <div class="timer-text" id="dlTimer"></div>
                 </div>
             </div>
@@ -542,7 +579,6 @@ async def web_ui():
 
         <script>
             let tg = window.Telegram.WebApp; tg.expand();
-            const DIRECT_LINKS = {{DIRECT_LINKS}}; 
             
             let currentPage = 1; let isLoading = false; let searchQuery = "";
             let uid = tg.initDataUnsafe.user?.id || 0;
@@ -551,6 +587,22 @@ async def web_ui():
             if(tg.initDataUnsafe && tg.initDataUnsafe.user) {
                 document.getElementById('uName').innerText = tg.initDataUnsafe.user.first_name;
                 if(tg.initDataUnsafe.user.photo_url) document.getElementById('uPic').src = tg.initDataUnsafe.user.photo_url;
+            }
+
+            // Safe Link Opener
+            function openSafeLink(url) {
+                if (!url.startsWith('http://') && !url.startsWith('https://')) {
+                    url = 'https://' + url;
+                }
+                try {
+                    if(url.includes('t.me')) {
+                        tg.openTelegramLink(url);
+                    } else {
+                        tg.openLink(url);
+                    }
+                } catch(e) {
+                    window.open(url, '_blank');
+                }
             }
 
             function drawSkeletons(count) {
@@ -656,33 +708,28 @@ async def web_ui():
                 timeout = setTimeout(() => { loadMovies(1); }, 500); 
             });
 
-            // --- Direct Link Logic with Native Anchor Tag ---
+            // --- Server-side Redirect Logic ---
             function handleMovieClick(id, isUnlocked) {
                 if(isUnlocked) {
                     sendFile(id);
                 } else {
                     activeMovieId = id;
-                    
-                    // এখানে লটারির মতো র‍্যান্ডম লিংক সেট করা হচ্ছে
-                    let link = "https://google.com";
-                    if(DIRECT_LINKS && DIRECT_LINKS.length > 0) {
-                        link = DIRECT_LINKS[Math.floor(Math.random() * DIRECT_LINKS.length)];
-                    }
-                    if (!link.startsWith('http')) {
-                        link = 'https://' + link;
-                    }
-                    
-                    // বাটনটিতে লিংক সেট করে দেওয়া হলো, ফলে ক্লিক করলে ফোনের ব্রাউজারে সুন্দরভাবে খুলবে
-                    let btn = document.getElementById('dlBtn');
-                    btn.href = link;
-                    
                     document.getElementById('dlModal').style.display = 'flex';
-                    btn.style.display = 'block';
+                    document.getElementById('dlBtn').style.display = 'block';
                     document.getElementById('dlTimer').style.display = 'none';
                 }
             }
 
-            function startTimerOnly() {
+            function onDirectLinkClick() {
+                // আপনার ডোমেইনের নিজস্ব সেফ API কল করা হচ্ছে
+                let safeApiUrl = window.location.origin + "/api/ad?t=" + new Date().getTime();
+                
+                try {
+                    tg.openLink(safeApiUrl); 
+                } catch(e) {
+                    window.open(safeApiUrl, '_blank');
+                }
+                
                 // বাটন হাইড করে টাইমার শো করা
                 document.getElementById('dlBtn').style.display = 'none';
                 let timerEl = document.getElementById('dlTimer');
@@ -724,7 +771,7 @@ async def web_ui():
     </body>
     </html>
     """
-    html_code = html_code.replace("{{TG_LINK}}", tg_url).replace("{{LINK_18}}", link_18).replace("{{DIRECT_LINKS}}", json.dumps(direct_links))
+    html_code = html_code.replace("{{TG_LINK}}", tg_url).replace("{{LINK_18}}", link_18)
     return html_code
 
 @app.get("/api/trending")
