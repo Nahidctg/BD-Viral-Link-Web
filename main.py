@@ -1,4 +1,4 @@
-import os, asyncio, datetime, uvicorn, json, random
+import os, asyncio, datetime, uvicorn
 import aiohttp
 from fastapi import FastAPI, Body, Request
 from fastapi.responses import HTMLResponse, StreamingResponse
@@ -11,12 +11,13 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from bson import ObjectId
 from pydantic import BaseModel
 
-# --- কনফিগারেশন ---
+# --- ржХржиржлрж┐ржЧрж╛рж░рзЗрж╢ржи ---
 TOKEN = os.getenv("BOT_TOKEN")
 MONGO_URL = os.getenv("MONGO_URI")
 OWNER_ID = int(os.getenv("ADMIN_ID", "0"))
 APP_URL = os.getenv("APP_URL")
 
+# ржЖржкржирж╛рж░ ржЪрзНржпрж╛ржирзЗрж▓рзЗрж░ ржЖржЗржбрж┐ ржирж┐ржЪрзЗ ржжрж┐ржи ржЕржержмрж╛ Environment Variable (CHANNEL_ID) ржерзЗржХрзЗ рж╕рзЗржЯ ржХрж░рзБржи
 CHANNEL_ID = os.getenv("CHANNEL_ID", "-1003655443965") 
 
 bot = Bot(token=TOKEN)
@@ -37,7 +38,7 @@ async def load_admins():
     async for admin in db.admins.find():
         admin_cache.add(admin["user_id"])
 
-# --- ব্যাকগ্রাউন্ড অটো-ডিলিট ওয়ার্কার ---
+# --- ржмрзНржпрж╛ржХржЧрзНрж░рж╛ржЙржирзНржб ржЕржЯрзЛ-ржбрж┐рж▓рж┐ржЯ ржУрзЯрж╛рж░рзНржХрж╛рж░ ---
 async def auto_delete_worker():
     while True:
         try:
@@ -52,7 +53,7 @@ async def auto_delete_worker():
         await asyncio.sleep(60)
 
 # ==========================================
-# ১. মেইন ওনার (Owner) স্পেশাল কমান্ড
+# рзз. ржорзЗржЗржи ржУржирж╛рж░ (Owner) рж╕рзНржкрзЗрж╢рж╛рж▓ ржХржорж╛ржирзНржб
 # ==========================================
 
 @dp.message(Command("addadmin"))
@@ -61,104 +62,62 @@ async def add_admin_cmd(m: types.Message):
     try:
         new_admin = int(m.text.split()[1])
         if new_admin in admin_cache:
-            return await m.answer("⚠️ এই ইউজারটি আগে থেকেই অ্যাডমিন!")
+            return await m.answer("тЪая╕П ржПржЗ ржЗржЙржЬрж╛рж░ржЯрж┐ ржЖржЧрзЗ ржерзЗржХрзЗржЗ ржЕрзНржпрж╛ржбржорж┐ржи!")
         await db.admins.insert_one({"user_id": new_admin})
         admin_cache.add(new_admin)
-        await m.answer(f"✅ নতুন অ্যাডমিন যুক্ত করা হয়েছে: <code>{new_admin}</code>", parse_mode="HTML")
-        try: await bot.send_message(new_admin, "🎉 <b>অভিনন্দন!</b> আপনাকে এই বটের অ্যাডমিন বানানো হয়েছে। আপনি এখন মুভি আপলোড করতে পারবেন।", parse_mode="HTML")
+        await m.answer(f"тЬЕ ржирждрзБржи ржЕрзНржпрж╛ржбржорж┐ржи ржпрзБржХрзНржд ржХрж░рж╛ рж╣рзЯрзЗржЫрзЗ: <code>{new_admin}</code>", parse_mode="HTML")
+        try: await bot.send_message(new_admin, "ЁЯОЙ <b>ржЕржнрж┐ржиржирзНржжржи!</b> ржЖржкржирж╛ржХрзЗ ржПржЗ ржмржЯрзЗрж░ ржЕрзНржпрж╛ржбржорж┐ржи ржмрж╛ржирж╛ржирзЛ рж╣рзЯрзЗржЫрзЗред ржЖржкржирж┐ ржПржЦржи ржорзБржнрж┐ ржЖржкрж▓рзЛржб ржХрж░рждрзЗ ржкрж╛рж░ржмрзЗржиред", parse_mode="HTML")
         except: pass
-    except: await m.answer("⚠️ সঠিক নিয়ম: <code>/addadmin ইউজার_আইডি</code>", parse_mode="HTML")
+    except: await m.answer("тЪая╕П рж╕ржарж┐ржХ ржирж┐рзЯржо: <code>/addadmin ржЗржЙржЬрж╛рж░_ржЖржЗржбрж┐</code>", parse_mode="HTML")
 
 @dp.message(Command("deladmin"))
 async def del_admin_cmd(m: types.Message):
     if m.from_user.id != OWNER_ID: return
     try:
         del_admin = int(m.text.split()[1])
-        if del_admin == OWNER_ID: return await m.answer("⚠️ আপনি নিজেকে (Owner) ডিলিট করতে পারবেনবিধা নেই!")
+        if del_admin == OWNER_ID: return await m.answer("тЪая╕П ржЖржкржирж┐ ржирж┐ржЬрзЗржХрзЗ (Owner) ржбрж┐рж▓рж┐ржЯ ржХрж░рждрзЗ ржкрж╛рж░ржмрзЗржи ржЕрзНржпрж╛ржХрж╛ржЙржирзНржЯрзЗрж░!")
         await db.admins.delete_one({"user_id": del_admin})
         admin_cache.discard(del_admin)
-        await m.answer(f"✅ অ্যাডমিন রিমুভ করা হয়েছে: <code>{del_admin}</code>", parse_mode="HTML")
-    except: await m.answer("⚠️ সঠিক নিয়ম: <code>/deladmin ইউজার_আইডি</code>", parse_mode="HTML")
+        await m.answer(f"тЬЕ ржЕрзНржпрж╛ржбржорж┐ржи рж░рж┐ржорзБржн ржХрж░рж╛ рж╣рзЯрзЗржЫрзЗ: <code>{del_admin}</code>", parse_mode="HTML")
+    except: await m.answer("тЪая╕П рж╕ржарж┐ржХ ржирж┐рзЯржо: <code>/deladmin ржЗржЙржЬрж╛рж░_ржЖржЗржбрж┐</code>", parse_mode="HTML")
 
 @dp.message(Command("adminlist"))
 async def list_admins_cmd(m: types.Message):
     if m.from_user.id != OWNER_ID: return
-    text = "👥 <b>বর্তমান অ্যাডমিন লিস্ট:</b>\n"
-    text += f"👑 Owner: <code>{OWNER_ID}</code>\n"
+    text = "ЁЯСе <b>ржмрж░рзНрждржорж╛ржи ржЕрзНржпрж╛ржбржорж┐ржи рж▓рж┐рж╕рзНржЯ:</b>\n"
+    text += f"ЁЯСС Owner: <code>{OWNER_ID}</code>\n"
     for ad in admin_cache:
-        if ad != OWNER_ID: text += f"👮 Admin: <code>{ad}</code>\n"
+        if ad != OWNER_ID: text += f"ЁЯСо Admin: <code>{ad}</code>\n"
     await m.answer(text, parse_mode="HTML")
 
 # ==========================================
-# ২. বটের সাধারণ অ্যাডমিন কমান্ড
+# рзи. ржмржЯрзЗрж░ рж╕рж╛ржзрж╛рж░ржг ржЕрзНржпрж╛ржбржорж┐ржи ржХржорж╛ржирзНржб
 # ==========================================
 
 @dp.message(Command("start"))
 async def start_cmd(message: types.Message):
     await db.users.update_one({"user_id": message.from_user.id}, {"$set": {"first_name": message.from_user.first_name}}, upsert=True)
-    kb = [[types.InlineKeyboardButton(text="🎬 BD Viral Link", web_app=types.WebAppInfo(url=APP_URL))]]
+    kb = [[types.InlineKeyboardButton(text="ЁЯОм BD Viral Link", web_app=types.WebAppInfo(url=APP_URL))]]
     markup = types.InlineKeyboardMarkup(inline_keyboard=kb)
     
     uid = message.from_user.id
     if uid in admin_cache:
         text = (
-            "👋 <b>হ্যালো অ্যাডমিন!</b>\n\n"
-            "⚙️ <b>কমান্ড:</b>\n"
-            "🔗 <b>ডাইরেক্ট লিংক:</b>\n"
-            "🔸 অ্যাড লিংক: <code>/addlink লিংক</code>\n"
-            "🔸 ডিলিট লিংক: <code>/dellink লিংক</code>\n"
-            "🔸 সব লিংক দেখুন: <code>/links</code>\n"
-            "🔸 আনলক টাইম: <code>/setunlock ঘণ্টা</code> (ex: /setunlock 24)\n\n"
-            "🛠 <b>অন্যান্য সেটিং:</b>\n"
-            "🔸 টেলিগ্রাম: <code>/settg লিংক</code> | 18+: <code>/set18 লিংক</code>\n"
-            "🔸 প্রোটেকশন: <code>/protect on</code> বা <code>/protect off</code>\n"
-            "🔸 অটো-ডিলিট টাইম: <code>/settime [মিনিট]</code>\n"
-            "🔸 ডিলিট: <code>/del</code> | স্ট্যাটাস: <code>/stats</code> | ব্রডকাস্ট: <code>/cast</code>\n"
+            "ЁЯСЛ <b>рж╣рзНржпрж╛рж▓рзЛ ржЕрзНржпрж╛ржбржорж┐ржи!</b>\n\n"
+            "тЪЩя╕П <b>ржХржорж╛ржирзНржб:</b>\n"
+            "ЁЯФ╕ ржЕрзНржпрж╛ржб ржЬрзЛржи: <code>/setad ID</code> | ржЕрзНржпрж╛ржб рж╕ржВржЦрзНржпрж╛: <code>/setadcount рж╕ржВржЦрзНржпрж╛</code>\n"
+            "ЁЯФ╕ ржЯрзЗрж▓рж┐ржЧрзНрж░рж╛ржо: <code>/settg рж▓рж┐ржВржХ</code> | 18+: <code>/set18 рж▓рж┐ржВржХ</code>\n"
+            "ЁЯФ╕ ржкрзНрж░рзЛржЯрзЗржХрж╢ржи: <code>/protect on</code> ржмрж╛ <code>/protect off</code>\n"
+            "ЁЯФ╕ ржЕржЯрзЛ-ржбрж┐рж▓рж┐ржЯ ржЯрж╛ржЗржо: <code>/settime [ржорж┐ржирж┐ржЯ]</code>\n"
+            "ЁЯФ╕ ржбрж┐рж▓рж┐ржЯ: <code>/del</code> | рж╕рзНржЯрзНржпрж╛ржЯрж╛рж╕: <code>/stats</code> | ржмрзНрж░ржбржХрж╛рж╕рзНржЯ: <code>/cast</code>\n"
         )
         if uid == OWNER_ID:
-            text += "\n👑 <b>ওনার কমান্ড:</b>\n🔸 অ্যাড অ্যাডমিন: <code>/addadmin ID</code>\n🔸 ডিলিট অ্যাডমিন: <code>/deladmin ID</code>\n🔸 অ্যাডমিন লিস্ট: <code>/adminlist</code>\n"
+            text += "\nЁЯСС <b>ржУржирж╛рж░ ржХржорж╛ржирзНржб:</b>\nЁЯФ╕ ржЕрзНржпрж╛ржб ржЕрзНржпрж╛ржбржорж┐ржи: <code>/addadmin ID</code>\nЁЯФ╕ ржбрж┐рж▓рж┐ржЯ ржЕрзНржпрж╛ржбржорж┐ржи: <code>/deladmin ID</code>\nЁЯФ╕ ржЕрзНржпрж╛ржбржорж┐ржи рж▓рж┐рж╕рзНржЯ: <code>/adminlist</code>\n"
             
-        text += "\n📥 <b>মুভি অ্যাড করতে প্রথমে ভিডিও বা ডকুমেন্ট ফাইল পাঠান।</b>"
+        text += "\nЁЯУе <b>ржорзБржнрж┐ ржЕрзНржпрж╛ржб ржХрж░рждрзЗ ржкрзНрж░ржержорзЗ ржнрж┐ржбрж┐ржУ ржмрж╛ ржбржХрзБржорзЗржирзНржЯ ржлрж╛ржЗрж▓ ржкрж╛ржарж╛ржиред</b>"
     else:
-        text = f"👋 <b>স্বাগতম {message.from_user.first_name}!</b>\n\n[আপনার টেলিগ্রাম আইডি: <code>{uid}</code>]\n\nমুভি দেখতে নিচের বাটনে ক্লিক করুন।"
+        text = f"ЁЯСЛ <b>рж╕рзНржмрж╛ржЧрждржо {message.from_user.first_name}!</b>\n\n[ржЖржкржирж╛рж░ ржЯрзЗрж▓рж┐ржЧрзНрж░рж╛ржо ржЖржЗржбрж┐: <code>{uid}</code>]\n\nржорзБржнрж┐ ржжрзЗржЦрждрзЗ ржирж┐ржЪрзЗрж░ ржмрж╛ржЯржирзЗ ржХрзНрж▓рж┐ржХ ржХрж░рзБржиред"
     await message.answer(text, reply_markup=markup, parse_mode="HTML")
-
-@dp.message(Command("addlink"))
-async def add_link_cmd(m: types.Message):
-    if m.from_user.id not in admin_cache: return
-    try:
-        link = m.text.split(" ", 1)[1].strip()
-        await db.settings.update_one({"id": "direct_links"}, {"$addToSet": {"links": link}}, upsert=True)
-        await m.answer(f"✅ নতুন ডাইরেক্ট লিংক অ্যাড করা হয়েছে:\n{link}")
-    except: await m.answer("⚠️ সঠিক নিয়ম: <code>/addlink https://yourlink.com...</code>", parse_mode="HTML")
-
-@dp.message(Command("dellink"))
-async def del_link_cmd(m: types.Message):
-    if m.from_user.id not in admin_cache: return
-    try:
-        link = m.text.split(" ", 1)[1].strip()
-        await db.settings.update_one({"id": "direct_links"}, {"$pull": {"links": link}})
-        await m.answer(f"✅ লিংক রিমুভ করা হয়েছে:\n{link}")
-    except: await m.answer("⚠️ সঠিক নিয়ম: <code>/dellink https://yourlink.com...</code>", parse_mode="HTML")
-
-@dp.message(Command("links"))
-async def show_links_cmd(m: types.Message):
-    if m.from_user.id not in admin_cache: return
-    data = await db.settings.find_one({"id": "direct_links"})
-    links = data.get("links", []) if data else []
-    if not links: return await m.answer("⚠️ কোনো ডাইরেক্ট লিংক অ্যাড করা নেই।")
-    msg = "🔗 <b>বর্তমান ডাইরেক্ট লিংকসমূহ:</b>\n\n"
-    for i, l in enumerate(links, 1): msg += f"{i}. <code>{l}</code>\n\n"
-    await m.answer(msg, parse_mode="HTML")
-
-@dp.message(Command("setunlock"))
-async def set_unlock_cmd(m: types.Message):
-    if m.from_user.id not in admin_cache: return
-    try:
-        hours = int(m.text.split()[1])
-        await db.settings.update_one({"id": "unlock_duration"}, {"$set": {"hours": hours}}, upsert=True)
-        await m.answer(f"✅ একবার আনলক করলে মুভি <b>{hours} ঘণ্টা</b> পর্যন্ত আনলক থাকবে।", parse_mode="HTML")
-    except: await m.answer("⚠️ সঠিক নিয়ম: <code>/setunlock 24</code> (২৪ ঘণ্টার জন্য)", parse_mode="HTML")
 
 @dp.message(Command("setadcount"))
 async def set_ad_count_cmd(m: types.Message):
@@ -167,16 +126,9 @@ async def set_ad_count_cmd(m: types.Message):
         count = int(m.text.split(" ")[1])
         if count < 1: count = 1
         await db.settings.update_one({"id": "ad_count"}, {"$set": {"count": count}}, upsert=True)
-        await m.answer(f"✅ অ্যাড দেখার সংখ্যা আপডেট হয়েছে: <b>{count} টি</b>।", parse_mode="HTML")
-    except: pass
-
-@dp.message(Command("setad"))
-async def set_ad(m: types.Message):
-    if m.from_user.id in admin_cache:
-        try:
-            await db.settings.update_one({"id": "ad_config"}, {"$set": {"zone_id": m.text.split(" ")[1]}}, upsert=True)
-            await m.answer("✅ জোন আপডেট হয়েছে।")
-        except: pass
+        await m.answer(f"тЬЕ ржкрзНрж░рждрж┐ ржорзБржнрж┐рждрзЗ ржЕрзНржпрж╛ржб ржжрзЗржЦрж╛рж░ рж╕ржВржЦрзНржпрж╛ рж╕рзЗржЯ ржХрж░рж╛ рж╣рзЯрзЗржЫрзЗ: <b>{count} ржЯрж┐</b>ред", parse_mode="HTML")
+    except:
+        await m.answer("тЪая╕П рж╕ржарж┐ржХ ржирж┐рзЯржо: <code>/setadcount 3</code> (рзйржЯрж┐ ржЕрзНржпрж╛ржб ржжрзЗржЦрждрзЗ рж╣ржмрзЗ)", parse_mode="HTML")
 
 @dp.message(Command("protect"))
 async def protect_cmd(m: types.Message):
@@ -185,11 +137,12 @@ async def protect_cmd(m: types.Message):
         state = m.text.split(" ")[1].lower()
         if state == "on":
             await db.settings.update_one({"id": "protect_content"}, {"$set": {"status": True}}, upsert=True)
-            await m.answer("✅ ফরোয়ার্ড প্রোটেকশন <b>চালু (ON)</b> করা হয়েছে।", parse_mode="HTML")
+            await m.answer("тЬЕ ржлрж░рзЛрзЯрж╛рж░рзНржб ржкрзНрж░рзЛржЯрзЗржХрж╢ржи <b>ржЪрж╛рж▓рзБ (ON)</b> ржХрж░рж╛ рж╣рзЯрзЗржЫрзЗред ржПржЦржи ржХрзЗржЙ ржорзБржнрж┐ ржлрж░рзЛрзЯрж╛рж░рзНржб ржмрж╛ рж╕рзЗржн ржХрж░рждрзЗ ржкрж╛рж░ржмрзЗ ржирж╛ред", parse_mode="HTML")
         elif state == "off":
             await db.settings.update_one({"id": "protect_content"}, {"$set": {"status": False}}, upsert=True)
-            await m.answer("✅ ফরোয়ার্ড প্রোটেকশন <b>বন্ধ (OFF)</b> করা হয়েছে।", parse_mode="HTML")
-    except: await m.answer("⚠️ সঠিক নিয়ম: <code>/protect on</code> অথবা <code>/protect off</code>", parse_mode="HTML")
+            await m.answer("тЬЕ ржлрж░рзЛрзЯрж╛рж░рзНржб ржкрзНрж░рзЛржЯрзЗржХрж╢ржи <b>ржмржирзНржз (OFF)</b> ржХрж░рж╛ рж╣рзЯрзЗржЫрзЗред ржПржЦржи рж╕ржмрж╛ржЗ ржорзБржнрж┐ ржлрж░рзЛрзЯрж╛рж░рзНржб ржХрж░рждрзЗ ржкрж╛рж░ржмрзЗред", parse_mode="HTML")
+        else: await m.answer("тЪая╕П рж╕ржарж┐ржХ ржирж┐рзЯржо: <code>/protect on</code> ржЕржержмрж╛ <code>/protect off</code>", parse_mode="HTML")
+    except: await m.answer("тЪая╕П рж╕ржарж┐ржХ ржирж┐рзЯржо: <code>/protect on</code> ржЕржержмрж╛ <code>/protect off</code>", parse_mode="HTML")
 
 @dp.message(Command("stats"))
 async def stats_cmd(m: types.Message):
@@ -199,30 +152,29 @@ async def stats_cmd(m: types.Message):
     time_cfg = await db.settings.find_one({"id": "del_time"})
     del_m = time_cfg['minutes'] if time_cfg else 60
     protect_cfg = await db.settings.find_one({"id": "protect_content"})
-    prot_status = "ON 🔒" if protect_cfg and protect_cfg.get('status', True) else "OFF 🔓"
+    prot_status = "ON ЁЯФТ" if protect_cfg and protect_cfg.get('status', True) else "OFF ЁЯФУ"
+    ad_count_cfg = await db.settings.find_one({"id": "ad_count"})
+    ads_req = ad_count_cfg['count'] if ad_count_cfg else 1
     
-    dl_cfg = await db.settings.find_one({"id": "direct_links"})
-    total_links = len(dl_cfg.get("links", [])) if dl_cfg else 0
-    
-    await m.answer(f"📊 <b>স্ট্যাটাস:</b>\n👥 মোট ইউজার: <code>{uc}</code>\n🎬 মোট মুভি: <code>{mc}</code>\n⏳ অটো-ডিলিট: <code>{del_m} মিনিট</code>\n🛡️ প্রোটেকশন: <b>{prot_status}</b>\n🔗 মোট ডাইরেক্ট লিংক: <b>{total_links} টি</b>", parse_mode="HTML")
+    await m.answer(f"ЁЯУК <b>рж╕рзНржЯрзНржпрж╛ржЯрж╛рж╕:</b>\nЁЯСе ржорзЛржЯ ржЗржЙржЬрж╛рж░: <code>{uc}</code>\nЁЯОм ржорзЛржЯ ржорзБржнрж┐: <code>{mc}</code>\nтП│ ржЕржЯрзЛ-ржбрж┐рж▓рж┐ржЯ: <code>{del_m} ржорж┐ржирж┐ржЯ</code>\nЁЯЫбя╕П ржкрзНрж░рзЛржЯрзЗржХрж╢ржи: <b>{prot_status}</b>\nЁЯТ░ ржЕрзНржпрж╛ржб ржЯрж╛рж░рзНржЧрзЗржЯ: <b>{ads_req} ржЯрж┐</b>", parse_mode="HTML")
 
 @dp.message(Command("del"))
 async def del_movie_list(m: types.Message):
     if m.from_user.id not in admin_cache: return
     movies = await db.movies.find().sort("created_at", -1).limit(20).to_list(length=20)
-    if not movies: return await m.answer("কোনো মুভি নেই।")
+    if not movies: return await m.answer("ржХрзЛржирзЛ ржорзБржнрж┐ ржирзЗржЗред")
     builder = InlineKeyboardBuilder()
-    for mv in movies: builder.button(text=f"❌ {mv['title']}", callback_data=f"del_{str(mv['_id'])}")
+    for mv in movies: builder.button(text=f"тЭМ {mv['title']}", callback_data=f"del_{str(mv['_id'])}")
     builder.adjust(1)
-    await m.answer("⚠️ ডিলিট করতে ক্লিক করুন:", reply_markup=builder.as_markup())
+    await m.answer("тЪая╕П ржбрж┐рж▓рж┐ржЯ ржХрж░рждрзЗ ржХрзНрж▓рж┐ржХ ржХрж░рзБржи:", reply_markup=builder.as_markup())
 
 @dp.callback_query(F.data.startswith("del_"))
 async def del_movie_callback(c: types.CallbackQuery):
     if c.from_user.id not in admin_cache: return
     try:
         await db.movies.delete_one({"_id": ObjectId(c.data.split("_")[1])})
-        await c.answer("✅ ডিলিট হয়েছে!", show_alert=True)
-        await c.message.edit_text("✅ মুভিটি ডাটাবেস থেকে মুছে ফেলা হয়েছে।", reply_markup=None)
+        await c.answer("тЬЕ ржбрж┐рж▓рж┐ржЯ рж╣рзЯрзЗржЫрзЗ!", show_alert=True)
+        await c.message.edit_text("тЬЕ ржорзБржнрж┐ржЯрж┐ ржбрж╛ржЯрж╛ржмрзЗрж╕ ржерзЗржХрзЗ ржорзБржЫрзЗ ржлрзЗрж▓рж╛ рж╣ржпрж╝рзЗржЫрзЗред", reply_markup=None)
     except: pass
 
 @dp.message(Command("settime"))
@@ -230,41 +182,49 @@ async def set_del_time(m: types.Message):
     if m.from_user.id in admin_cache:
         try:
             await db.settings.update_one({"id": "del_time"}, {"$set": {"minutes": int(m.text.split(" ")[1])}}, upsert=True)
-            await m.answer(f"✅ অটো-ডিলিট টাইম সেট করা হয়েছে।")
-        except: await m.answer("⚠️ সঠিক নিয়ম: <code>/settime 60</code>", parse_mode="HTML")
+            await m.answer(f"тЬЕ ржЕржЯрзЛ-ржбрж┐рж▓рж┐ржЯ ржЯрж╛ржЗржо рж╕рзЗржЯ ржХрж░рж╛ рж╣рзЯрзЗржЫрзЗред")
+        except: await m.answer("тЪая╕П рж╕ржарж┐ржХ ржирж┐рзЯржо: <code>/settime 60</code>", parse_mode="HTML")
+
+@dp.message(Command("setad"))
+async def set_ad(m: types.Message):
+    if m.from_user.id in admin_cache:
+        try:
+            await db.settings.update_one({"id": "ad_config"}, {"$set": {"zone_id": m.text.split(" ")[1]}}, upsert=True)
+            await m.answer("тЬЕ ржЬрзЛржи ржЖржкржбрзЗржЯ рж╣рзЯрзЗржЫрзЗред")
+        except: await m.answer("тЪая╕П рж╕ржарж┐ржХ ржирж┐рзЯржо: <code>/setad 1234567</code>", parse_mode="HTML")
 
 @dp.message(Command("settg"))
 async def set_tg(m: types.Message):
     if m.from_user.id in admin_cache:
         try:
             await db.settings.update_one({"id": "link_tg"}, {"$set": {"url": m.text.split(" ")[1]}}, upsert=True)
-            await m.answer("✅ টেলিগ্রাম লিংক আপডেট হয়েছে।")
-        except: await m.answer("⚠️ সঠিক নিয়ম: <code>/settg https://t.me/...</code>", parse_mode="HTML")
+            await m.answer("тЬЕ ржЯрзЗрж▓рж┐ржЧрзНрж░рж╛ржо рж▓рж┐ржВржХ ржЖржкржбрзЗржЯ рж╣рзЯрзЗржЫрзЗред")
+        except: await m.answer("тЪая╕П рж╕ржарж┐ржХ ржирж┐рзЯржо: <code>/settg https://t.me/...</code>", parse_mode="HTML")
 
 @dp.message(Command("set18"))
 async def set_18(m: types.Message):
     if m.from_user.id in admin_cache:
         try:
             await db.settings.update_one({"id": "link_18"}, {"$set": {"url": m.text.split(" ")[1]}}, upsert=True)
-            await m.answer("✅ 18+ লিংক আপডেট হয়েছে।")
-        except: await m.answer("⚠️ সঠিক নিয়ম: <code>/set18 https://t.me/...</code>", parse_mode="HTML")
+            await m.answer("тЬЕ 18+ рж▓рж┐ржВржХ ржЖржкржбрзЗржЯ рж╣рзЯрзЗржЫрзЗред")
+        except: await m.answer("тЪая╕П рж╕ржарж┐ржХ ржирж┐рзЯржо: <code>/set18 https://t.me/...</code>", parse_mode="HTML")
 
 # ==========================================
-# ৩. ইনপুট প্রসেসিং (আপলোড, ব্রডকাস্ট, রিপ্লাই)
+# рзй. ржЗржиржкрзБржЯ ржкрзНрж░рж╕рзЗрж╕рж┐ржВ (ржЖржкрж▓рзЛржб, ржмрзНрж░ржбржХрж╛рж╕рзНржЯ, рж░рж┐ржкрзНрж▓рж╛ржЗ)
 # ==========================================
 
 @dp.message(Command("cast"))
 async def broadcast_prep(m: types.Message):
     if m.from_user.id not in admin_cache: return
     admin_temp[m.from_user.id] = {"step": "bcast_wait"}
-    await m.answer("📢 <b>অ্যাডভান্সড ব্রডকাস্ট:</b>\nযে মেসেজটি ব্রডকাস্ট করতে চান সেটি পাঠান।\n<i>নোট: বট অটোমেটিক মেসেজের নিচে '🎬 ওপেন মুভি অ্যাপ' বাটন লাগিয়ে দিবে।</i>", parse_mode="HTML")
+    await m.answer("ЁЯУв <b>ржЕрзНржпрж╛ржбржнрж╛ржирзНрж╕ржб ржмрзНрж░ржбржХрж╛рж╕рзНржЯ:</b>\nржпрзЗ ржорзЗрж╕рзЗржЬржЯрж┐ ржмрзНрж░ржбржХрж╛рж╕рзНржЯ ржХрж░рждрзЗ ржЪрж╛ржи рж╕рзЗржЯрж┐ ржкрж╛ржарж╛ржиред\n<i>ржирзЛржЯ: ржмржЯ ржЕржЯрзЛржорзЗржЯрж┐ржХ ржорзЗрж╕рзЗржЬрзЗрж░ ржирж┐ржЪрзЗ 'ЁЯОм ржУржкрзЗржи ржорзБржнрж┐ ржЕрзНржпрж╛ржк' ржмрж╛ржЯржи рж▓рж╛ржЧрж┐рзЯрзЗ ржжрж┐ржмрзЗред</i>", parse_mode="HTML")
 
 @dp.callback_query(F.data.startswith("reply_"))
 async def process_reply_cb(c: types.CallbackQuery):
     if c.from_user.id not in admin_cache: return
     user_id = int(c.data.split("_")[1])
     admin_temp[c.from_user.id] = {"step": "reply_user", "target_uid": user_id}
-    await c.message.reply("✍️ <b>ইউজারকে কী রিপ্লাই দিতে চান তা লিখে পাঠান:</b>\n(টেক্সট, ছবি বা ভয়েস মেসেজ পাঠাতে পারেন)", parse_mode="HTML")
+    await c.message.reply("тЬНя╕П <b>ржЗржЙржЬрж╛рж░ржХрзЗ ржХрзА рж░рж┐ржкрзНрж▓рж╛ржЗ ржжрж┐рждрзЗ ржЪрж╛ржи рждрж╛ рж▓рж┐ржЦрзЗ ржкрж╛ржарж╛ржи:</b>\n(ржЯрзЗржХрзНрж╕ржЯ, ржЫржмрж┐ ржмрж╛ ржнрзЯрзЗрж╕ ржорзЗрж╕рзЗржЬ ржкрж╛ржарж╛рждрзЗ ржкрж╛рж░рзЗржи)", parse_mode="HTML")
     await c.answer()
 
 @dp.message(F.content_type.in_({'text', 'photo', 'video', 'document', 'voice'}))
@@ -275,16 +235,16 @@ async def catch_all_inputs(m: types.Message):
         target_uid = admin_temp[uid]["target_uid"]
         del admin_temp[uid]
         try:
-            if m.text: await bot.send_message(target_uid, f"📩 <b>অ্যাডমিন রিপ্লাই:</b>\n\n{m.text}", parse_mode="HTML")
-            else: await m.copy_to(target_uid, caption=f"📩 <b>অ্যাডমিন রিপ্লাই:</b>\n\n{m.caption or ''}", parse_mode="HTML")
-            await m.answer("✅ ইউজারকে সফলভাবে রিপ্লাই পাঠানো হয়েছে!")
-        except Exception: await m.answer("⚠️ রিপ্লাই পাঠানো যায়নি! ইউজার হয়তো বট ব্লক করেছে।")
+            if m.text: await bot.send_message(target_uid, f"ЁЯУй <b>ржЕрзНржпрж╛ржбржорж┐ржи рж░рж┐ржкрзНрж▓рж╛ржЗ:</b>\n\n{m.text}", parse_mode="HTML")
+            else: await m.copy_to(target_uid, caption=f"ЁЯУй <b>ржЕрзНржпрж╛ржбржорж┐ржи рж░рж┐ржкрзНрж▓рж╛ржЗ:</b>\n\n{m.caption or ''}", parse_mode="HTML")
+            await m.answer("тЬЕ ржЗржЙржЬрж╛рж░ржХрзЗ рж╕ржлрж▓ржнрж╛ржмрзЗ рж░рж┐ржкрзНрж▓рж╛ржЗ ржкрж╛ржарж╛ржирзЛ рж╣рзЯрзЗржЫрзЗ!")
+        except Exception: await m.answer("тЪая╕П рж░рж┐ржкрзНрж▓рж╛ржЗ ржкрж╛ржарж╛ржирзЛ ржпрж╛рзЯржирж┐! ржЗржЙржЬрж╛рж░ рж╣рзЯрждрзЛ ржмржЯ ржмрзНрж▓ржХ ржХрж░рзЗржЫрзЗред")
         return
 
     if uid in admin_cache and admin_temp.get(uid, {}).get("step") == "bcast_wait":
         del admin_temp[uid]
-        await m.answer("⏳ ব্রডকাস্ট শুরু হয়েছে...")
-        kb = types.InlineKeyboardMarkup(inline_keyboard=[[types.InlineKeyboardButton(text="🎬 ওপেন মুভি অ্যাপ", web_app=types.WebAppInfo(url=APP_URL))]])
+        await m.answer("тП│ ржмрзНрж░ржбржХрж╛рж╕рзНржЯ рж╢рзБрж░рзБ рж╣рзЯрзЗржЫрзЗ...")
+        kb = types.InlineKeyboardMarkup(inline_keyboard=[[types.InlineKeyboardButton(text="ЁЯОм ржУржкрзЗржи ржорзБржнрж┐ ржЕрзНржпрж╛ржк", web_app=types.WebAppInfo(url=APP_URL))]])
         success = 0
         async for u in db.users.find():
             try:
@@ -292,23 +252,23 @@ async def catch_all_inputs(m: types.Message):
                 success += 1
                 await asyncio.sleep(0.05)
             except: pass
-        await m.answer(f"✅ সম্পন্ন! সর্বমোট <b>{success}</b> জনকে মেসেজ পাঠানো হয়েছে।", parse_mode="HTML")
+        await m.answer(f"тЬЕ рж╕ржорзНржкржирзНржи! рж╕рж░рзНржмржорзЛржЯ <b>{success}</b> ржЬржиржХрзЗ ржорзЗрж╕рзЗржЬ ржкрж╛ржарж╛ржирзЛ рж╣рзЯрзЗржЫрзЗред", parse_mode="HTML")
         return
 
     if uid in admin_cache and (m.document or m.video):
         fid = m.video.file_id if m.video else m.document.file_id
         ftype = "video" if m.video else "document"
         admin_temp[uid] = {"step": "photo", "file_id": fid, "type": ftype}
-        await m.answer("✅ ফাইল পেয়েছি! এবার মুভির <b>পোস্টার (Photo)</b> সেন্ড করুন।", parse_mode="HTML")
+        await m.answer("тЬЕ ржлрж╛ржЗрж▓ ржкрзЗрзЯрзЗржЫрж┐! ржПржмрж╛рж░ ржорзБржнрж┐рж░ <b>ржкрзЛрж╕рзНржЯрж╛рж░ (Photo)</b> рж╕рзЗржирзНржб ржХрж░рзБржиред", parse_mode="HTML")
         return
 
     if uid in admin_cache and m.photo and admin_temp.get(uid, {}).get("step") == "photo":
         admin_temp[uid]["photo_id"] = m.photo[-1].file_id
         admin_temp[uid]["step"] = "title"
-        await m.answer("✅ পোস্টার পেয়েছি! এবার মুভির <b>নাম</b> লিখে পাঠান।", parse_mode="HTML")
+        await m.answer("тЬЕ ржкрзЛрж╕рзНржЯрж╛рж░ ржкрзЗрзЯрзЗржЫрж┐! ржПржмрж╛рж░ ржорзБржнрж┐рж░ <b>ржирж╛ржо</b> рж▓рж┐ржЦрзЗ ржкрж╛ржарж╛ржиред", parse_mode="HTML")
         return
 
-    # === মুভি ডাটাবেসে সেভ এবং অটো-নোটিফিকেশন সেকশন ===
+    # === ржорзБржнрж┐ ржбрж╛ржЯрж╛ржмрзЗрж╕рзЗ рж╕рзЗржн ржПржмржВ ржЕржЯрзЛ-ржирзЛржЯрж┐ржлрж┐ржХрзЗрж╢ржи рж╕рзЗржХрж╢ржи ===
     if uid in admin_cache and m.text and not str(m.text).startswith("/"):
         if admin_temp.get(uid, {}).get("step") == "title":
             title = m.text.strip()
@@ -316,6 +276,7 @@ async def catch_all_inputs(m: types.Message):
             file_id = admin_temp[uid]["file_id"]
             file_type = admin_temp[uid]["type"]
             
+            # ржбрж╛ржЯрж╛ржмрзЗрж╕рзЗ рж╕рзЗржн ржХрж░рж╛
             await db.movies.insert_one({
                 "title": title, 
                 "photo_id": photo_id, 
@@ -325,23 +286,29 @@ async def catch_all_inputs(m: types.Message):
                 "created_at": datetime.datetime.utcnow()
             })
             del admin_temp[uid]
-            await m.answer(f"🎉 <b>{title}</b> অ্যাপে সফলভাবে যুক্ত করা হয়েছে!", parse_mode="HTML")
+            await m.answer(f"ЁЯОЙ <b>{title}</b> ржЕрзНржпрж╛ржкрзЗ рж╕ржлрж▓ржнрж╛ржмрзЗ ржпрзБржХрзНржд ржХрж░рж╛ рж╣рзЯрзЗржЫрзЗ!", parse_mode="HTML")
             
+            # ржЪрзНржпрж╛ржирзЗрж▓рзЗ ржирзЛржЯрж┐ржлрж┐ржХрзЗрж╢ржи ржкрж╛ржарж╛ржирзЛ
             if CHANNEL_ID and CHANNEL_ID != "-100XXXXXXXXXX":
                 try:
-                    try: target_channel = int(CHANNEL_ID)
-                    except ValueError: target_channel = CHANNEL_ID
+                    # ржЪрзНржпрж╛ржирзЗрж▓ ржЖржЗржбрж┐ржЯрж┐ String ржерзЗржХрзЗ Integer ржП ржХржиржнрж╛рж░рзНржЯ ржХрж░рж╛ рж╣рж▓рзЛ ржпрж╛рждрзЗ ржПрж░рж░ ржирж╛ ржЖрж╕рзЗ
+                    try:
+                        target_channel = int(CHANNEL_ID)
+                    except ValueError:
+                        target_channel = CHANNEL_ID
 
+                    # ржмржЯрзЗрж░ ржЗржЙржЬрж╛рж░ржирзЗржо ржмрзЗрж░ ржХрж░рж╛ рж╣ржЪрзНржЫрзЗ
                     bot_info = await bot.get_me()
                     bot_username = bot_info.username
                     
-                    kb = [[types.InlineKeyboardButton(text="🎬 ভিডিওটি দেখতে এখানে ক্লিক করুন", url=f"https://t.me/{bot_username}?start=new")]]
+                    # ржЪрзНржпрж╛ржирзЗрж▓рзЗ web_app ржмрж╛ржЯржирзЗрж░ ржмржжрж▓рзЗ url ржмрж╛ржЯржи ржмрзНржпржмрж╣рж╛рж░ ржХрж░рж╛ рж╣рж▓рзЛ
+                    kb = [[types.InlineKeyboardButton(text="ЁЯОм ржнрж┐ржбрж┐ржУржЯрж┐ ржжрзЗржЦрждрзЗ ржПржЦрж╛ржирзЗ ржХрзНрж▓рж┐ржХ ржХрж░рзБржи", url=f"https://t.me/{bot_username}?start=new")]]
                     markup = types.InlineKeyboardMarkup(inline_keyboard=kb)
                     
                     caption = (
-                        f"🎬 <b>নতুন ভিডিও যুক্ত হয়েছে!</b>\n\n"
-                        f"📌 <b>নাম:</b> {title}\n\n"
-                        f"👇 <i>ভিডিওটি দেখতে নিচের বাটনে ক্লিক করে বটে যান এবং অ্যাপটি ওপেন করুন।</i>"
+                        f"ЁЯОм <b>ржирждрзБржи ржнрж┐ржбрж┐ржУ ржпрзБржХрзНржд рж╣рзЯрзЗржЫрзЗ!</b>\n\n"
+                        f"ЁЯУМ <b>ржирж╛ржо:</b> {title}\n\n"
+                        f"ЁЯСЗ <i>ржнрж┐ржбрж┐ржУржЯрж┐ ржжрзЗржЦрждрзЗ ржирж┐ржЪрзЗрж░ ржмрж╛ржЯржирзЗ ржХрзНрж▓рж┐ржХ ржХрж░рзЗ ржмржЯрзЗ ржпрж╛ржи ржПржмржВ ржЕрзНржпрж╛ржкржЯрж┐ ржУржкрзЗржи ржХрж░рзБржиред</i>"
                     )
                     
                     await bot.send_photo(
@@ -352,64 +319,24 @@ async def catch_all_inputs(m: types.Message):
                         reply_markup=markup
                     )
                 except Exception as e:
-                    await m.answer(f"⚠️ মুভি ডাটাবেসে যুক্ত হয়েছে, কিন্তু চ্যানেলে যায়নি!\n<b>কারণ:</b> <code>{str(e)}</code>", parse_mode="HTML")
-
+                    # ржПржмрж╛рж░ ржЪрзНржпрж╛ржирзЗрж▓рзЗ ржорзЗрж╕рзЗржЬ ржирж╛ ржЧрзЗрж▓рзЗ ржХрзА ржХрж╛рж░ржгрзЗ ржпрж╛рзЯржирж┐ рж╕рзЗржЯрж╛ ржЖржкржирж╛ржХрзЗ рж░рж┐ржкрзНрж▓рж╛ржЗрждрзЗ рж╕рзНржкрж╖рзНржЯ ржмрж▓рзЗ ржжрж┐ржмрзЗ
+                    await m.answer(f"тЪая╕П ржорзБржнрж┐ ржбрж╛ржЯрж╛ржмрзЗрж╕рзЗ ржпрзБржХрзНржд рж╣рзЯрзЗржЫрзЗ, ржХрж┐ржирзНрждрзБ ржЪрзНржпрж╛ржирзЗрж▓рзЗ ржпрж╛рзЯржирж┐!\n<b>ржХрж╛рж░ржг:</b> <code>{str(e)}</code>", parse_mode="HTML")
 
 # ==========================================
-# ৪. ওয়েব অ্যাপ UI এবং APIs
+# рзк. ржУрзЯрзЗржм ржЕрзНржпрж╛ржк UI ржПржмржВ APIs
 # ==========================================
-
-# --- নতুন রিডাইরেক্ট API (এরর ফিক্স করা হয়েছে) ---
-@app.get("/api/ad")
-async def secure_ad_redirect():
-    data = await db.settings.find_one({"id": "direct_links"})
-    links = data.get("links", ["https://google.com"]) if data else ["https://google.com"]
-    if not links: links = ["https://google.com"]
-    
-    # লিংকের আগে-পিছে কোনো স্পেস থাকলে তা মুছে ফেলবে (.strip())
-    chosen_link = random.choice(links).strip()
-    if not chosen_link.startswith("http"):
-        chosen_link = "https://" + chosen_link
-
-    # নতুন স্মার্ট রিডাইরেক্ট পেজ (টেলিগ্রাম ব্লক করবে না)
-    html = f"""
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Loading...</title>
-        <style>
-            body {{ background: #0f172a; color: white; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; font-family: sans-serif; text-align: center; }}
-            .loader {{ border: 5px solid #1e293b; border-top: 5px solid #00ffd5; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; margin-bottom: 20px; }}
-            @keyframes spin {{ 0% {{ transform: rotate(0deg); }} 100% {{ transform: rotate(360deg); }} }}
-            .btn {{ background: linear-gradient(90deg, #ff007f, #7928ca); color: white; padding: 12px 25px; text-decoration: none; border-radius: 30px; font-weight: bold; margin-top: 20px; display: inline-block; box-shadow: 0 0 10px rgba(255,0,127,0.5); }}
-        </style>
-    </head>
-    <body>
-        <div class="loader"></div>
-        <h3>অপেক্ষা করুন... রিডাইরেক্ট করা হচ্ছে</h3>
-        <p style="color: gray; font-size: 13px; margin-top: 10px;">অটোমেটিক রিডাইরেক্ট না হলে নিচের বাটনে ক্লিক করুন</p>
-        <a href="{chosen_link}" class="btn" target="_blank">👉 Continue 👈</a>
-        
-        <script>
-            setTimeout(function() {{
-                window.location.replace("{chosen_link}");
-            }}, 500);
-        </script>
-    </body>
-    </html>
-    """
-    return HTMLResponse(content=html)
-
 
 @app.get("/", response_class=HTMLResponse)
 async def web_ui():
+    ad_cfg = await db.settings.find_one({"id": "ad_config"})
     tg_cfg = await db.settings.find_one({"id": "link_tg"})
     b18_cfg = await db.settings.find_one({"id": "link_18"})
+    ad_count_cfg = await db.settings.find_one({"id": "ad_count"})
     
+    zone_id = ad_cfg['zone_id'] if ad_cfg else "10916755"
     tg_url = tg_cfg['url'] if tg_cfg else "https://t.me/MovieeBD"
     link_18 = b18_cfg['url'] if b18_cfg else "https://t.me/MovieeBD"
+    required_ads = ad_count_cfg['count'] if ad_count_cfg else 1
 
     html_code = r"""
     <!DOCTYPE html>
@@ -476,48 +403,18 @@ async def web_ui():
             .btn-tg { bottom:95px; background:#24A1DE; }
             .btn-req { bottom:35px; background:#10b981; }
 
-            .modal { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); display:none; align-items:center; justify-content:center; z-index:3000; padding:20px;}
-            .modal-content { background:#1e293b; width:100%; max-width:400px; padding:30px; border-radius:15px; text-align:center; }
+            /* Ad Screen Updated Styles */
+            .ad-screen { position:fixed; top:0; left:0; width:100%; height:100%; background:#0f172a; display:none; flex-direction:column; align-items:center; justify-content:center; z-index:2000; }
+            .timer-ui { display:flex; flex-direction:column; align-items:center; }
+            .timer { width:100px; height:100px; border-radius:50%; border:5px solid red; display:flex; align-items:center; justify-content:center; font-size:40px; margin-bottom:15px; color:red; font-weight:bold; }
+            .ad-step-text { font-size:18px; font-weight:bold; color:#fff; margin-bottom: 20px; background:#1e293b; padding:8px 15px; border-radius:20px;}
+            .btn-next-ad { display:none; background:#f87171; color:white; border:none; padding:15px 30px; border-radius:30px; font-size:18px; font-weight:bold; cursor:pointer; box-shadow: 0 4px 15px rgba(248,113,113,0.5); transition: 0.3s;}
+            .btn-next-ad:active { transform: scale(0.95); }
+            
+            .modal { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); display:none; align-items:center; justify-content:center; z-index:3000; }
+            .modal-content { background:#1e293b; width:90%; padding:30px; border-radius:15px; text-align:center; }
             .req-input { width: 100%; padding: 12px; margin: 15px 0; border-radius: 8px; border: none; background: #0f172a; color: white; outline:none; }
             .btn-submit { background: #10b981; color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: bold; width:100%; font-size:16px;}
-
-            /* --- RGB Direct Link Popup Styles --- */
-            .rgb-wrapper {
-                position: relative;
-                width: 100%; max-width: 400px;
-                background: #0f172a;
-                border-radius: 20px;
-                padding: 2px;
-                z-index: 1;
-            }
-            .rgb-wrapper::before {
-                content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-                background: linear-gradient(45deg, #ff0000, #ff7300, #fffb00, #48ff00, #00ffd5, #002bff, #7a00ff, #ff00c8, #ff0000);
-                background-size: 400%; z-index: -1; border-radius: 20px; animation: glowing 10s linear infinite;
-            }
-            .rgb-content {
-                background: #0f172a; border-radius: 18px; padding: 30px 20px; text-align: center; box-shadow: inset 0 0 20px rgba(0,0,0,0.8);
-            }
-            .rgb-title {
-                font-size: 22px; font-weight: bold; margin-bottom: 15px;
-                background: -webkit-linear-gradient(45deg, #f87171, #fbbf24);
-                -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-            }
-            .rgb-text { font-size: 16px; color: #cbd5e1; line-height: 1.5; margin-bottom: 25px; }
-            .rgb-text span { color: #00ffd5; font-weight: bold; }
-            
-            .btn-click-here {
-                display: block; width: 100%;
-                background: linear-gradient(90deg, #ff007f, #7928ca);
-                color: white; font-size: 22px; font-weight: bold;
-                padding: 15px; border: none; border-radius: 30px;
-                cursor: pointer;
-                box-shadow: 0 0 15px rgba(255, 0, 127, 0.6);
-                animation: pulse 1.5s infinite; transition: 0.3s;
-            }
-            .btn-click-here:active { transform: scale(0.95); }
-            @keyframes pulse { 0% { box-shadow: 0 0 10px rgba(255,0,127,0.5); } 50% { box-shadow: 0 0 25px rgba(255,0,127,1); } 100% { box-shadow: 0 0 10px rgba(255,0,127,0.5); } }
-            .timer-text { display: none; font-size: 18px; color: #fff; background: #1e293b; padding: 15px; border-radius: 15px; border: 1px solid #334155; }
         </style>
     </head>
     <body>
@@ -527,11 +424,11 @@ async def web_ui():
         </header>
 
         <div class="search-box">
-            <input type="text" id="searchInput" class="search-input" placeholder="মুভি বা ওয়েব সিরিজ খুঁজুন...">
+            <input type="text" id="searchInput" class="search-input" placeholder="ржорзБржнрж┐ ржмрж╛ ржУрзЯрзЗржм рж╕рж┐рж░рж┐ржЬ ржЦрзБржБржЬрзБржи...">
         </div>
 
         <div id="trendingWrapper">
-            <div class="section-title"><i class="fa-solid fa-fire"></i> ট্রেন্ডিং ভাইরাল ভিডিও</div>
+            <div class="section-title"><i class="fa-solid fa-fire"></i> ржЯрзНрж░рзЗржирзНржбрж┐ржВ ржнрж╛ржЗрж░рж╛рж▓ ржнрж┐ржбрж┐ржУ</div>
             <div class="trending-container" id="trendingGrid">
                 <div class="skeleton" style="min-width:130px; height:180px;"></div>
                 <div class="skeleton" style="min-width:130px; height:180px;"></div>
@@ -539,53 +436,53 @@ async def web_ui():
             </div>
         </div>
 
-        <div class="section-title"><i class="fa-solid fa-film"></i> নতুন সব ভাইরাল ভিডিও</div>
+        <div class="section-title"><i class="fa-solid fa-film"></i> ржирждрзБржи рж╕ржм ржнрж╛ржЗрж░рж╛рж▓ ржнрж┐ржбрж┐ржУ</div>
         <div class="grid" id="movieGrid"></div>
         <div class="pagination" id="paginationBox"></div>
 
-        <div class="floating-btn btn-18" onclick="openSafeLink('{{LINK_18}}')">18+</div>
-        <div class="floating-btn btn-tg" onclick="openSafeLink('{{TG_LINK}}')"><i class="fa-brands fa-telegram"></i></div>
+        <div class="floating-btn btn-18" onclick="window.open('{{LINK_18}}')">18+</div>
+        <div class="floating-btn btn-tg" onclick="window.open('{{TG_LINK}}')"><i class="fa-brands fa-telegram"></i></div>
         <div class="floating-btn btn-req" onclick="openReqModal()"><i class="fa-solid fa-code-pull-request"></i></div>
 
-        <!-- RGB Direct Link Modal -->
-        <div id="dlModal" class="modal">
-            <div class="rgb-wrapper">
-                <div class="rgb-content">
-                    <div class="rgb-title"><i class="fa-solid fa-lock"></i> ভিডিওটি লক করা আছে!</div>
-                    <p class="rgb-text">
-                        এই ভিডিওটি আনলক করতে হলে নিচের <span>Click Here</span> বাটনে ক্লিক করে <span>১৫ সেকেন্ড</span> অপেক্ষা করে আবার ব্যাক করুন।<br><br>সাথে সাথে ভিডিও আপনার টেলিগ্রাম ইনবক্সে চলে যাবে!
-                    </p>
-                    <button id="dlBtn" class="btn-click-here" onclick="onDirectLinkClick()">👉 CLICK HERE 👈</button>
-                    <div class="timer-text" id="dlTimer"></div>
-                </div>
+        <!-- Ad Screen with Multi-Ad Logic -->
+        <div id="adScreen" class="ad-screen">
+            <div class="ad-step-text" id="adStepText">ржЕрзНржпрж╛ржб: 1/1</div>
+            
+            <div class="timer-ui" id="timerUI">
+                <div class="timer" id="timer">15</div>
+                <p>рж╕рж╛рж░рзНржнрж╛рж░рзЗрж░ рж╕рж╛ржерзЗ ржХрж╛ржирзЗржХрзНржЯ рж╣ржЪрзНржЫрзЗ...</p>
             </div>
+            
+            <button class="btn-next-ad" id="nextAdBtn" onclick="nextAdStep()">ржкрж░ржмрж░рзНрждрзА ржЕрзНржпрж╛ржб ржжрзЗржЦрзБржи <i class="fa-solid fa-arrow-right"></i></button>
         </div>
 
-        <!-- Success Modal -->
         <div id="successModal" class="modal">
             <div class="modal-content">
                 <i class="fa-solid fa-circle-check" style="font-size:60px; color:#10b981;"></i>
-                <h2 style="margin:15px 0;">সম্পন্ন হয়েছে!</h2>
-                <p style="margin-bottom: 20px; color:gray; font-size:14px;">বটের ইনবক্স চেক করুন। <br><span style="color:#f87171;">সতর্কতা: কপিরাইট এড়াতে মুভিটি কিছুক্ষণ পর অটোমেটিক ডিলিট হয়ে যাবে।</span></p>
-                <button class="btn-submit" onclick="tg.close()">বটে ফিরে যান</button>
+                <h2 style="margin:15px 0;">рж╕ржорзНржкржирзНржи рж╣рзЯрзЗржЫрзЗ!</h2>
+                <p style="margin-bottom: 20px; color:gray; font-size:14px;">ржмржЯрзЗрж░ ржЗржиржмржХрзНрж╕ ржЪрзЗржХ ржХрж░рзБржиред <br><span style="color:#f87171;">рж╕рждрж░рзНржХрждрж╛: ржХржкрж┐рж░рж╛ржЗржЯ ржПрзЬрж╛рждрзЗ ржорзБржнрж┐ржЯрж┐ ржХрж┐ржЫрзБржХрзНрж╖ржг ржкрж░ ржЕржЯрзЛржорзЗржЯрж┐ржХ ржбрж┐рж▓рж┐ржЯ рж╣рзЯрзЗ ржпрж╛ржмрзЗред</span></p>
+                <button class="btn-submit" onclick="tg.close()">ржмржЯрзЗ ржлрж┐рж░рзЗ ржпрж╛ржи</button>
             </div>
         </div>
 
-        <!-- Request Modal -->
         <div id="reqModal" class="modal">
             <div class="modal-content">
-                <h2>মুভি রিকোয়েস্ট করুন</h2>
-                <input type="text" id="reqText" class="req-input" placeholder="মুভির নাম ও রিলিজ সাল লিখুন...">
-                <button class="btn-submit" onclick="sendReq()">সাবমিট করুন</button>
-                <p style="margin-top:15px; color:gray; cursor:pointer;" onclick="document.getElementById('reqModal').style.display='none'">বাতিল করুন</p>
+                <h2>ржорзБржнрж┐ рж░рж┐ржХрзЛрзЯрзЗрж╕рзНржЯ ржХрж░рзБржи</h2>
+                <input type="text" id="reqText" class="req-input" placeholder="ржорзБржнрж┐рж░ ржирж╛ржо ржУ рж░рж┐рж▓рж┐ржЬ рж╕рж╛рж▓ рж▓рж┐ржЦрзБржи...">
+                <button class="btn-submit" onclick="sendReq()">рж╕рж╛ржмржорж┐ржЯ ржХрж░рзБржи</button>
+                <p style="margin-top:15px; color:gray; cursor:pointer;" onclick="document.getElementById('reqModal').style.display='none'">ржмрж╛рждрж┐рж▓ ржХрж░рзБржи</p>
             </div>
         </div>
 
         <script>
             let tg = window.Telegram.WebApp; tg.expand();
+            const ZONE_ID = "{{ZONE_ID}}";
+            const REQUIRED_ADS = parseInt("{{AD_COUNT}}");
             
             let currentPage = 1; let isLoading = false; let searchQuery = "";
             let uid = tg.initDataUnsafe.user?.id || 0;
+            
+            let currentAdStep = 1;
             let activeMovieId = null;
 
             if(tg.initDataUnsafe && tg.initDataUnsafe.user) {
@@ -593,21 +490,9 @@ async def web_ui():
                 if(tg.initDataUnsafe.user.photo_url) document.getElementById('uPic').src = tg.initDataUnsafe.user.photo_url;
             }
 
-            // Safe Link Opener
-            function openSafeLink(url) {
-                if (!url.startsWith('http://') && !url.startsWith('https://')) {
-                    url = 'https://' + url;
-                }
-                try {
-                    if(url.includes('t.me')) {
-                        tg.openTelegramLink(url);
-                    } else {
-                        tg.openLink(url);
-                    }
-                } catch(e) {
-                    window.open(url, '_blank');
-                }
-            }
+            const s = document.createElement('script');
+            s.src = '//libtl.com/sdk.js'; s.setAttribute('data-zone', ZONE_ID); s.setAttribute('data-sdk', 'show_' + ZONE_ID);
+            document.head.appendChild(s);
 
             function drawSkeletons(count) {
                 let html = ""; for(let i=0; i<count; i++) html += `<div class="skeleton"></div>`; return html;
@@ -641,7 +526,7 @@ async def web_ui():
                         return `
                         <div class="trending-card" onclick="handleMovieClick('${m._id}', ${m.is_unlocked})">
                             <div class="post-content">
-                                <div class="top-badge">🔥 TOP</div>
+                                <div class="top-badge">ЁЯФе TOP</div>
                                 <img src="/api/image/${m.photo_id}" onerror="this.src='https://via.placeholder.com/400x200?text=No+Image'">
                                 ${tagHtml}
                                 <div class="view-badge"><i class="fa-solid fa-eye"></i> ${m.clicks}</div>
@@ -667,7 +552,7 @@ async def web_ui():
                     const data = await r.json();
                     
                     if(data.movies.length === 0) {
-                        grid.innerHTML = "<p style='grid-column: span 2; text-align:center; color:gray; padding:20px;'>কোনো মুভি পাওয়া যায়নি!</p>";
+                        grid.innerHTML = "<p style='grid-column: span 2; text-align:center; color:gray; padding:20px;'>ржХрзЛржирзЛ ржорзБржнрж┐ ржкрж╛ржУрзЯрж╛ ржпрж╛рзЯржирж┐!</p>";
                     } else {
                         grid.innerHTML = data.movies.map(m => {
                             let tagHtml = m.is_unlocked ? `<div class="tag tag-unlocked"><i class="fa-solid fa-unlock"></i></div>` : `<div class="tag tag-locked"><i class="fa-solid fa-lock"></i></div>`;
@@ -712,54 +597,52 @@ async def web_ui():
                 timeout = setTimeout(() => { loadMovies(1); }, 500); 
             });
 
-            // --- Server-side Redirect Logic ---
+            // Multi-Ad Logic
             function handleMovieClick(id, isUnlocked) {
                 if(isUnlocked) {
                     sendFile(id);
                 } else {
                     activeMovieId = id;
-                    document.getElementById('dlModal').style.display = 'flex';
-                    document.getElementById('dlBtn').style.display = 'block';
-                    document.getElementById('dlTimer').style.display = 'none';
+                    currentAdStep = 1;
+                    startAdTimer();
                 }
             }
 
-            // --- নতুন ফিক্স করা JS ফাংশন ---
-            function onDirectLinkClick() {
-                let protocol = window.location.protocol === 'http:' ? 'https:' : window.location.protocol;
-                let safeApiUrl = protocol + "//" + window.location.host + "/api/ad?t=" + new Date().getTime();
+            function startAdTimer() {
+                if (typeof window['show_' + ZONE_ID] === 'function') window['show_' + ZONE_ID]();
                 
-                try {
-                    let a = document.createElement('a');
-                    a.href = safeApiUrl;
-                    a.target = '_blank';
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                } catch(e) {
-                    window.open(safeApiUrl, '_blank');
-                }
+                document.getElementById('adScreen').style.display = 'flex';
+                document.getElementById('timerUI').style.display = 'flex';
+                document.getElementById('nextAdBtn').style.display = 'none';
                 
-                document.getElementById('dlBtn').style.display = 'none';
-                let timerEl = document.getElementById('dlTimer');
-                timerEl.style.display = 'block';
+                document.getElementById('adStepText').innerText = `ржЕрзНржпрж╛ржб: ${currentAdStep}/${REQUIRED_ADS}`;
                 
                 let t = 15;
-                timerEl.innerHTML = `অপেক্ষা করুন... <br><br><b><span style="color:#00ffd5; font-size:32px;">${t}</span></b><br><br> সেকেন্ড`;
+                document.getElementById('timer').innerText = t;
                 
                 let iv = setInterval(() => {
-                    t--;
-                    timerEl.innerHTML = `অপেক্ষা করুন... <br><br><b><span style="color:#00ffd5; font-size:32px;">${t}</span></b><br><br> সেকেন্ড`;
+                    t--; document.getElementById('timer').innerText = t;
                     if(t <= 0) { 
                         clearInterval(iv); 
-                        document.getElementById('dlModal').style.display = 'none';
-                        sendFile(activeMovieId); 
+                        if(currentAdStep < REQUIRED_ADS) {
+                            document.getElementById('timerUI').style.display = 'none';
+                            document.getElementById('nextAdBtn').style.display = 'block';
+                            document.getElementById('nextAdBtn').innerHTML = `ржкрж░ржмрж░рзНрждрзА ржЕрзНржпрж╛ржб ржжрзЗржЦрзБржи (${currentAdStep + 1}/${REQUIRED_ADS}) <i class="fa-solid fa-arrow-right"></i>`;
+                        } else {
+                            sendFile(activeMovieId); 
+                        }
                     }
                 }, 1000);
             }
 
+            function nextAdStep() {
+                currentAdStep++;
+                startAdTimer();
+            }
+
             async function sendFile(id) {
                 await fetch('/api/send', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({userId: uid, movieId: id})});
+                document.getElementById('adScreen').style.display = 'none';
                 document.getElementById('successModal').style.display = 'flex';
                 setTimeout(() => { loadTrending(); loadMovies(currentPage); }, 1000); 
             }
@@ -767,11 +650,11 @@ async def web_ui():
             function openReqModal() { document.getElementById('reqModal').style.display = 'flex'; }
             async function sendReq() {
                 const text = document.getElementById('reqText').value;
-                if(!text) return alert('মুভির নাম লিখুন!');
+                if(!text) return alert('ржорзБржнрж┐рж░ ржирж╛ржо рж▓рж┐ржЦрзБржи!');
                 await fetch('/api/request', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({uid: uid, uname: tg.initDataUnsafe.user?.first_name || 'Guest', movie: text})});
                 document.getElementById('reqModal').style.display = 'none';
                 document.getElementById('reqText').value = '';
-                alert('রিকোয়েস্ট সফলভাবে পাঠানো হয়েছে!');
+                alert('рж░рж┐ржХрзЛрзЯрзЗрж╕рзНржЯ рж╕ржлрж▓ржнрж╛ржмрзЗ ржкрж╛ржарж╛ржирзЛ рж╣рзЯрзЗржЫрзЗ!');
             }
 
             loadTrending();
@@ -780,16 +663,14 @@ async def web_ui():
     </body>
     </html>
     """
-    html_code = html_code.replace("{{TG_LINK}}", tg_url).replace("{{LINK_18}}", link_18)
+    html_code = html_code.replace("{{ZONE_ID}}", zone_id).replace("{{TG_LINK}}", tg_url).replace("{{LINK_18}}", link_18).replace("{{AD_COUNT}}", str(required_ads))
     return html_code
 
 @app.get("/api/trending")
 async def trending_movies(uid: int = 0):
     unlocked_movie_ids = []
     if uid != 0:
-        dur_cfg = await db.settings.find_one({"id": "unlock_duration"})
-        unlock_hours = dur_cfg["hours"] if dur_cfg else 24
-        time_limit = datetime.datetime.utcnow() - datetime.timedelta(hours=unlock_hours)
+        time_limit = datetime.datetime.utcnow() - datetime.timedelta(hours=24)
         async for u in db.user_unlocks.find({"user_id": uid, "unlocked_at": {"$gt": time_limit}}):
             unlocked_movie_ids.append(u["movie_id"])
 
@@ -813,9 +694,7 @@ async def list_movies(page: int = 1, q: str = "", uid: int = 0):
 
     unlocked_movie_ids = []
     if uid != 0:
-        dur_cfg = await db.settings.find_one({"id": "unlock_duration"})
-        unlock_hours = dur_cfg["hours"] if dur_cfg else 24
-        time_limit = datetime.datetime.utcnow() - datetime.timedelta(hours=unlock_hours)
+        time_limit = datetime.datetime.utcnow() - datetime.timedelta(hours=24)
         async for u in db.user_unlocks.find({"user_id": uid, "unlocked_at": {"$gt": time_limit}}):
             unlocked_movie_ids.append(u["movie_id"])
 
@@ -856,7 +735,7 @@ async def send_file(d: dict = Body(...)):
             protect_cfg = await db.settings.find_one({"id": "protect_content"})
             is_protected = protect_cfg['status'] if protect_cfg else True
             
-            caption = f"🎥 <b>{m['title']}</b>\n\n⏳ <b>সতর্কতা:</b> কপিরাইট এড়াতে মুভিটি <b>{del_minutes} মিনিট</b> পর অটো-ডিলিট হয়ে যাবে। দয়া করে এখনই ফরওয়ার্ড বা সেভ করে নিন!\n\n📥 Join: https://t.me/+5ixoBj0Ay7oxOTM1"
+            caption = f"ЁЯОе <b>{m['title']}</b>\n\nтП│ <b>рж╕рждрж░рзНржХрждрж╛:</b> ржХржкрж┐рж░рж╛ржЗржЯ ржПрзЬрж╛рждрзЗ ржорзБржнрж┐ржЯрж┐ <b>{del_minutes} ржорж┐ржирж┐ржЯ</b> ржкрж░ ржЕржЯрзЛ-ржбрж┐рж▓рж┐ржЯ рж╣рзЯрзЗ ржпрж╛ржмрзЗред ржжрзЯрж╛ ржХрж░рзЗ ржПржЦржиржЗ ржлрж░ржУрзЯрж╛рж░рзНржб ржмрж╛ рж╕рзЗржн ржХрж░рзЗ ржирж┐ржи!\n\nЁЯУе Join: https://t.me/+5ixoBj0Ay7oxOTM1"
             
             sent_msg = None
             if m.get("file_type") == "video": 
@@ -880,8 +759,8 @@ class ReqModel(BaseModel):
 async def handle_request(data: ReqModel):
     try: 
         builder = InlineKeyboardBuilder()
-        builder.button(text="✍️ রিপ্লাই দিন", callback_data=f"reply_{data.uid}")
-        await bot.send_message(OWNER_ID, f"🔔 <b>নতুন মুভি রিকোয়েস্ট!</b>\n\n👤 ইউজার: {data.uname} (<code>{data.uid}</code>)\n🎬 মুভির নাম: <b>{data.movie}</b>", parse_mode="HTML", reply_markup=builder.as_markup())
+        builder.button(text="тЬНя╕П рж░рж┐ржкрзНрж▓рж╛ржЗ ржжрж┐ржи", callback_data=f"reply_{data.uid}")
+        await bot.send_message(OWNER_ID, f"ЁЯФФ <b>ржирждрзБржи ржорзБржнрж┐ рж░рж┐ржХрзЛрзЯрзЗрж╕рзНржЯ!</b>\n\nЁЯСд ржЗржЙржЬрж╛рж░: {data.uname} (<code>{data.uid}</code>)\nЁЯОм ржорзБржнрж┐рж░ ржирж╛ржо: <b>{data.movie}</b>", parse_mode="HTML", reply_markup=builder.as_markup())
     except: pass
     return {"ok": True}
 
