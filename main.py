@@ -726,14 +726,14 @@ async def web_admin_panel(auth: bool = Depends(verify_admin)):
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>MovieZone Admin Panel</title>
+        <title>BD Viral Link Admin Panel</title>
         <script src="https://cdn.tailwindcss.com"></script>
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     </head>
     <body class="bg-gray-900 text-white font-sans antialiased relative">
         <div class="max-w-6xl mx-auto p-5">
             <div class="flex justify-between items-center mb-8 border-b border-gray-700 pb-4">
-                <h1 class="text-3xl font-bold text-red-500"><i class="fa-solid fa-shield-halved"></i> MovieZone Admin</h1>
+                <h1 class="text-3xl font-bold text-red-500"><i class="fa-solid fa-shield-halved"></i> BD Viral Link Admin</h1>
             </div>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
                 <div class="bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-700">
@@ -933,7 +933,7 @@ async def web_ui():
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-        <title>MovieZone BD</title>
+        <title>BD Viral Link</title>
         <script src="https://telegram.org/js/telegram-web-app.js"></script>
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
         
@@ -1093,7 +1093,7 @@ async def web_ui():
     </head>
     <body onclick="closeMenu(event)">
         <header>
-            <div class="logo">MovieZone <span>BD</span></div>
+            <div class="logo">BD Viral <span>Link</span></div>
             <div class="header-right">
                 <div style="display: flex; flex-direction: column; align-items: flex-end;">
                     <div class="user-info">
