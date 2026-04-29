@@ -1125,7 +1125,7 @@ async def web_ui():
         </div>
 
         <div id="trendingWrapper">
-            <div class="section-title"><i class="fa-solid fa-fire"></i> ট্রেন্ডিং মুভি</div>
+            <div class="section-title"><i class="fa-solid fa-fire"></i> ট্রেন্ডিং ভাইরাল ভিডিও</div>
             <div class="trending-container" id="trendingGrid">
                 <div class="skeleton" style="min-width:140px; height:240px;"></div>
                 <div class="skeleton" style="min-width:140px; height:240px;"></div>
@@ -1138,7 +1138,7 @@ async def web_ui():
             <div class="upcoming-container" id="upcomingGrid"></div>
         </div>
 
-        <div class="section-title"><i class="fa-solid fa-film"></i> নতুন সব মুভি</div>
+        <div class="section-title"><i class="fa-solid fa-film"></i> নতুন সব ভাইরাল ভিডিও</div>
         <div class="grid" id="movieGrid"></div>
         <div class="pagination" id="paginationBox"></div>
 
