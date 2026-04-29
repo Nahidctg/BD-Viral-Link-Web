@@ -74,7 +74,7 @@ async def del_admin_cmd(m: types.Message):
     if m.from_user.id != OWNER_ID: return
     try:
         del_admin = int(m.text.split()[1])
-        if del_admin == OWNER_ID: return await m.answer("⚠️ আপনি নিজেকে (Owner) ডিলিট করতে পারবেন না!")
+        if del_admin == OWNER_ID: return await m.answer("⚠️ আপনি নিজেকে (Owner) ডিলিট করতে পারবেনবিধা নেই!")
         await db.admins.delete_one({"user_id": del_admin})
         admin_cache.discard(del_admin)
         await m.answer(f"✅ অ্যাডমিন রিমুভ করা হয়েছে: <code>{del_admin}</code>", parse_mode="HTML")
@@ -359,40 +359,44 @@ async def catch_all_inputs(m: types.Message):
 # ৪. ওয়েব অ্যাপ UI এবং APIs
 # ==========================================
 
-# --- নতুন রিডাইরেক্ট API (এরর ফিক্স করার জন্য) ---
+# --- নতুন রিডাইরেক্ট API (এরর ফিক্স করা হয়েছে) ---
 @app.get("/api/ad")
 async def secure_ad_redirect():
     data = await db.settings.find_one({"id": "direct_links"})
     links = data.get("links", ["https://google.com"]) if data else ["https://google.com"]
     if not links: links = ["https://google.com"]
     
-    # লটারির মতো র‍্যান্ডম লিংক বাছাই
-    chosen_link = random.choice(links)
+    # লিংকের আগে-পিছে কোনো স্পেস থাকলে তা মুছে ফেলবে (.strip())
+    chosen_link = random.choice(links).strip()
     if not chosen_link.startswith("http"):
         chosen_link = "https://" + chosen_link
 
-    # এইচটিএমএল পেজের মাধ্যমে রিডাইরেক্ট, এতে টেলিগ্রাম ব্লক করবে না
+    # নতুন স্মার্ট রিডাইরেক্ট পেজ (টেলিগ্রাম ব্লক করবে না)
     html = f"""
     <!DOCTYPE html>
     <html lang="en">
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <meta http-equiv="refresh" content="0;url={chosen_link}">
         <title>Loading...</title>
-        <script>
-            setTimeout(function() {{
-                window.location.href = "{chosen_link}";
-            }}, 100);
-        </script>
         <style>
-            body {{ background: #0f172a; color: white; display: flex; justify-content: center; align-items: center; height: 100vh; font-family: sans-serif; }}
-            .loader {{ border: 8px solid #1e293b; border-top: 8px solid #00ffd5; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; }}
+            body {{ background: #0f172a; color: white; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; font-family: sans-serif; text-align: center; }}
+            .loader {{ border: 5px solid #1e293b; border-top: 5px solid #00ffd5; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; margin-bottom: 20px; }}
             @keyframes spin {{ 0% {{ transform: rotate(0deg); }} 100% {{ transform: rotate(360deg); }} }}
+            .btn {{ background: linear-gradient(90deg, #ff007f, #7928ca); color: white; padding: 12px 25px; text-decoration: none; border-radius: 30px; font-weight: bold; margin-top: 20px; display: inline-block; box-shadow: 0 0 10px rgba(255,0,127,0.5); }}
         </style>
     </head>
     <body>
-        <div><div class="loader"></div><p style="margin-top:20px;">অপেক্ষা করুন...</p></div>
+        <div class="loader"></div>
+        <h3>অপেক্ষা করুন... রিডাইরেক্ট করা হচ্ছে</h3>
+        <p style="color: gray; font-size: 13px; margin-top: 10px;">অটোমেটিক রিডাইরেক্ট না হলে নিচের বাটনে ক্লিক করুন</p>
+        <a href="{chosen_link}" class="btn" target="_blank">👉 Continue 👈</a>
+        
+        <script>
+            setTimeout(function() {{
+                window.location.replace("{chosen_link}");
+            }}, 500);
+        </script>
     </body>
     </html>
     """
@@ -720,17 +724,22 @@ async def web_ui():
                 }
             }
 
+            // --- নতুন ফিক্স করা JS ফাংশন ---
             function onDirectLinkClick() {
-                // আপনার ডোমেইনের নিজস্ব সেফ API কল করা হচ্ছে
-                let safeApiUrl = window.location.origin + "/api/ad?t=" + new Date().getTime();
+                let protocol = window.location.protocol === 'http:' ? 'https:' : window.location.protocol;
+                let safeApiUrl = protocol + "//" + window.location.host + "/api/ad?t=" + new Date().getTime();
                 
                 try {
-                    tg.openLink(safeApiUrl); 
+                    let a = document.createElement('a');
+                    a.href = safeApiUrl;
+                    a.target = '_blank';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
                 } catch(e) {
                     window.open(safeApiUrl, '_blank');
                 }
                 
-                // বাটন হাইড করে টাইমার শো করা
                 document.getElementById('dlBtn').style.display = 'none';
                 let timerEl = document.getElementById('dlTimer');
                 timerEl.style.display = 'block';
