@@ -17,7 +17,6 @@ MONGO_URL = os.getenv("MONGO_URI")
 OWNER_ID = int(os.getenv("ADMIN_ID", "0"))
 APP_URL = os.getenv("APP_URL")
 
-# আপনার চ্যানেলের আইডি নিচে দিন অথবা Environment Variable (CHANNEL_ID) থেকে সেট করুন
 CHANNEL_ID = os.getenv("CHANNEL_ID", "-1003655443965") 
 
 bot = Bot(token=TOKEN)
@@ -124,7 +123,6 @@ async def start_cmd(message: types.Message):
         text = f"👋 <b>স্বাগতম {message.from_user.first_name}!</b>\n\n[আপনার টেলিগ্রাম আইডি: <code>{uid}</code>]\n\nমুভি দেখতে নিচের বাটনে ক্লিক করুন।"
     await message.answer(text, reply_markup=markup, parse_mode="HTML")
 
-# --- নতুন ডাইরেক্ট লিংক কমান্ডসমূহ ---
 @dp.message(Command("addlink"))
 async def add_link_cmd(m: types.Message):
     if m.from_user.id not in admin_cache: return
@@ -162,7 +160,6 @@ async def set_unlock_cmd(m: types.Message):
         await m.answer(f"✅ একবার আনলক করলে মুভি <b>{hours} ঘণ্টা</b> পর্যন্ত আনলক থাকবে।", parse_mode="HTML")
     except: await m.answer("⚠️ সঠিক নিয়ম: <code>/setunlock 24</code> (২৪ ঘণ্টার জন্য)", parse_mode="HTML")
 
-# --- আগের সেটিং কমান্ডসমূহ (কোনোটি ডিলিট করা হয়নি) ---
 @dp.message(Command("setadcount"))
 async def set_ad_count_cmd(m: types.Message):
     if m.from_user.id not in admin_cache: return
@@ -524,8 +521,8 @@ async def web_ui():
         <div class="grid" id="movieGrid"></div>
         <div class="pagination" id="paginationBox"></div>
 
-        <div class="floating-btn btn-18" onclick="window.open('{{LINK_18}}')">18+</div>
-        <div class="floating-btn btn-tg" onclick="window.open('{{TG_LINK}}')"><i class="fa-brands fa-telegram"></i></div>
+        <div class="floating-btn btn-18" onclick="openSafeLink('{{LINK_18}}')">18+</div>
+        <div class="floating-btn btn-tg" onclick="openSafeLink('{{TG_LINK}}')"><i class="fa-brands fa-telegram"></i></div>
         <div class="floating-btn btn-req" onclick="openReqModal()"><i class="fa-solid fa-code-pull-request"></i></div>
 
         <!-- RGB Direct Link Modal -->
@@ -573,6 +570,18 @@ async def web_ui():
             if(tg.initDataUnsafe && tg.initDataUnsafe.user) {
                 document.getElementById('uName').innerText = tg.initDataUnsafe.user.first_name;
                 if(tg.initDataUnsafe.user.photo_url) document.getElementById('uPic').src = tg.initDataUnsafe.user.photo_url;
+            }
+
+            // Safe External Link Opener for Telegram Mini Apps
+            function openSafeLink(url) {
+                if (!url.startsWith('http://') && !url.startsWith('https://')) {
+                    url = 'https://' + url;
+                }
+                try {
+                    tg.openLink(url);
+                } catch(e) {
+                    window.open(url, '_blank');
+                }
             }
 
             function drawSkeletons(count) {
@@ -691,14 +700,13 @@ async def web_ui():
             }
 
             function onDirectLinkClick() {
-                // লটারির মতো রেন্ডাম লিংক সিলেক্ট
                 let link = "https://google.com"; // Default
                 if(DIRECT_LINKS && DIRECT_LINKS.length > 0) {
                     link = DIRECT_LINKS[Math.floor(Math.random() * DIRECT_LINKS.length)];
                 }
                 
-                // লিংক ওপেন করা
-                window.open(link, '_blank');
+                // টেলিগ্রামের অফিসিয়াল API দিয়ে লিংক ওপেন করা
+                openSafeLink(link);
                 
                 // বাটন হাইড করে টাইমার শো করা
                 document.getElementById('dlBtn').style.display = 'none';
