@@ -105,11 +105,13 @@ async def get_video_duration(file_path):
 
 async def generate_collage(video_path, output_path):
     duration = await get_video_duration(video_path)
+    # ভিডিওর ৪টি ভিন্ন অংশ থেকে স্ক্রিনশটের সময় নির্ধারণ
     timestamps = [max(1, duration * 0.15), duration * 0.4, duration * 0.65, duration * 0.85]
     
     images = []
     for i, t in enumerate(timestamps):
         img_name = f"temp_frame_{i}_{int(time.time())}.jpg"
+        # FFmpeg দিয়ে ফ্রেম বের করা
         cmd = f'ffmpeg -y -ss {t} -i "{video_path}" -vframes 1 -q:v 2 "{img_name}"'
         process = await asyncio.create_subprocess_shell(cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
         await process.communicate()
@@ -117,6 +119,7 @@ async def generate_collage(video_path, output_path):
         if os.path.exists(img_name):
             try:
                 img = Image.open(img_name)
+                # প্রতিটি ছবিকে একই সাইজে (Width 500) রিসাইজ করা
                 w_percent = (500 / float(img.size[0]))
                 h_size = int((float(img.size[1]) * float(w_percent)))
                 img = img.resize((500, h_size), Image.Resampling.LANCZOS)
@@ -125,19 +128,42 @@ async def generate_collage(video_path, output_path):
             finally:
                 if os.path.exists(img_name): os.remove(img_name)
     
-    if not images: return False
+    if not images: 
+        return False
         
-    total_height = sum(img.size[1] for img in images) + (len(images)-1)*5 
-    collage = Image.new('RGB', (500, total_height), color=(20, 20, 20))
+    # যদি কোনো কারণে ৪টার কম স্ক্রিনশট আসে, তবে শেষের ছবিটা দিয়ে গ্যাপ পূরণ করা হবে
+    while len(images) < 4:
+        images.append(images[-1].copy())
+        
+    # প্রথম ছবির সাইজ অনুযায়ী পোস্টারের মাপ নির্ধারণ
+    img_w, img_h = images[0].size
+    padding = 15 # ছবির মাঝের ফাঁকা জায়গা (গ্যাপ)
     
-    y_offset = 0
-    for img in images:
-        collage.paste(img, (0, y_offset))
-        y_offset += img.size[1] + 5
+    # 2x2 গ্রিড পোস্টারের টোটাল সাইজ
+    poster_w = (img_w * 2) + (padding * 3)
+    poster_h = (img_h * 2) + (padding * 3)
+    
+    # সুন্দর একটি ডার্ক ব্যাকগ্রাউন্ড (Post Background) তৈরি
+    collage = Image.new('RGB', (poster_w, poster_h), color=(15, 23, 42))
+    
+    # ৪টি ছবির পজিশন (পাশাপাশি ও নিচে)
+    positions = [
+        (padding, padding),                               # Top-Left
+        (img_w + padding * 2, padding),                   # Top-Right
+        (padding, img_h + padding * 2),                   # Bottom-Left
+        (img_w + padding * 2, img_h + padding * 2)        # Bottom-Right
+    ]
+    
+    # গ্রিডে ছবিগুলো বসানো
+    for idx, img in enumerate(images[:4]):
+        # যদি কোনো ছবির হাইট একটু আলাদা হয়, তবে জোর করে সমান করে নেওয়া
+        if img.size != (img_w, img_h):
+            img = img.resize((img_w, img_h), Image.Resampling.LANCZOS)
+        collage.paste(img, positions[idx])
         
-    collage.save(output_path)
+    # কোয়ালিটি ভালো রেখে সেভ করা
+    collage.save(output_path, quality=90)
     return True
-
 async def video_queue_worker():
     global is_processing
     while True:
