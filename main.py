@@ -9,6 +9,8 @@ import hashlib
 import urllib.parse
 import secrets
 import json
+import subprocess
+from PIL import Image
 
 # ==========================================
 # 🛑 FIX FOR EVENT LOOP ERROR
@@ -30,15 +32,19 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.types import FSInputFile
 
 from motor.motor_asyncio import AsyncIOMotorClient
 from bson import ObjectId
 from pydantic import BaseModel
+from pyrogram import Client as PyroClient
 
 # ==========================================
 # 1. Configuration & Global Variables
 # ==========================================
 TOKEN = os.getenv("BOT_TOKEN")
+API_ID = int(os.getenv("API_ID", "0"))  # Pyrogram API ID
+API_HASH = os.getenv("API_HASH", "")    # Pyrogram API HASH
 MONGO_URL = os.getenv("MONGO_URI")
 OWNER_ID = int(os.getenv("ADMIN_ID", "0"))
 APP_URL = os.getenv("APP_URL")
@@ -50,6 +56,9 @@ bot = Bot(token=TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 app = FastAPI()
 security = HTTPBasic()
+
+# Pyrogram Client for Large Files Auto Processing
+pyro_app = PyroClient("bot_session", api_id=API_ID, api_hash=API_HASH, bot_token=TOKEN, in_memory=True)
 
 app.add_middleware(
     CORSMiddleware, 
@@ -65,6 +74,9 @@ db = client['movie_database']
 admin_cache = set([OWNER_ID]) 
 banned_cache = set() 
 
+# Auto Processing Queue
+video_queue = asyncio.Queue()
+is_processing = False
 
 # ==========================================
 # 2. FSM States (For Uploading Flow)
@@ -77,6 +89,101 @@ class AdminStates(StatesGroup):
     waiting_for_quality = State() 
     waiting_for_upc_photo = State()
     waiting_for_upc_title = State()
+
+
+# ==========================================
+# Auto Video Processing Logic (Queue System)
+# ==========================================
+async def get_video_duration(file_path):
+    try:
+        cmd = f'ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "{file_path}"'
+        process = await asyncio.create_subprocess_shell(cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+        stdout, _ = await process.communicate()
+        return float(stdout.decode().strip())
+    except:
+        return 10.0 
+
+async def generate_collage(video_path, output_path):
+    duration = await get_video_duration(video_path)
+    timestamps = [max(1, duration * 0.15), duration * 0.4, duration * 0.65, duration * 0.85]
+    
+    images = []
+    for i, t in enumerate(timestamps):
+        img_name = f"temp_frame_{i}_{int(time.time())}.jpg"
+        cmd = f'ffmpeg -y -ss {t} -i "{video_path}" -vframes 1 -q:v 2 "{img_name}"'
+        process = await asyncio.create_subprocess_shell(cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+        await process.communicate()
+        
+        if os.path.exists(img_name):
+            try:
+                img = Image.open(img_name)
+                w_percent = (500 / float(img.size[0]))
+                h_size = int((float(img.size[1]) * float(w_percent)))
+                img = img.resize((500, h_size), Image.Resampling.LANCZOS)
+                images.append(img)
+            except Exception: pass
+            finally:
+                if os.path.exists(img_name): os.remove(img_name)
+    
+    if not images: return False
+        
+    total_height = sum(img.size[1] for img in images) + (len(images)-1)*5 
+    collage = Image.new('RGB', (500, total_height), color=(20, 20, 20))
+    
+    y_offset = 0
+    for img in images:
+        collage.paste(img, (0, y_offset))
+        y_offset += img.size[1] + 5
+        
+    collage.save(output_path)
+    return True
+
+async def video_queue_worker():
+    global is_processing
+    while True:
+        chat_id, message_id, aiogram_file_id, file_type = await video_queue.get()
+        is_processing = True
+        try:
+            admin_id = chat_id
+            status_msg = await bot.send_message(admin_id, "⏳ <b>Processing Video...</b> (Downloading)")
+            
+            pyro_msg = await pyro_app.get_messages(chat_id, message_id)
+            
+            total_vids = await db.movies.count_documents({})
+            serial_no = total_vids + 1
+            auto_title = f"New Viral Video {serial_no:04d}"
+            
+            video_path = f"temp_video_{serial_no}_{int(time.time())}.mp4"
+            collage_path = f"collage_{serial_no}_{int(time.time())}.jpg"
+            
+            await pyro_app.download_media(pyro_msg, file_name=video_path)
+            
+            await bot.edit_message_text("📸 <b>Generating Screenshots...</b>", chat_id=admin_id, message_id=status_msg.message_id, parse_mode="HTML")
+            success = await generate_collage(video_path, collage_path)
+            
+            if not success:
+                await bot.edit_message_text("❌ Screenshot তৈরি করতে সমস্যা হয়েছে।", chat_id=admin_id, message_id=status_msg.message_id)
+                continue
+                
+            photo_msg = await bot.send_photo(admin_id, photo=FSInputFile(collage_path), caption=f"✅ <b>{auto_title}</b> Successfully Uploaded!")
+            photo_id = photo_msg.photo[-1].file_id
+            
+            await db.movies.insert_one({
+                "title": auto_title, "quality": "HD", "photo_id": photo_id, 
+                "file_id": aiogram_file_id, "file_type": file_type,
+                "clicks": 0, "created_at": datetime.datetime.utcnow()
+            })
+            
+            await bot.delete_message(chat_id=admin_id, message_id=status_msg.message_id)
+            
+            if os.path.exists(video_path): os.remove(video_path)
+            if os.path.exists(collage_path): os.remove(collage_path)
+            
+        except Exception as e:
+            await bot.send_message(chat_id, f"⚠️ Error processing video: {str(e)}")
+        finally:
+            video_queue.task_done()
+            is_processing = False
 
 
 # ==========================================
@@ -208,6 +315,7 @@ async def start_cmd(message: types.Message, state: FSMContext):
         text = (
             "👋 <b>হ্যালো অ্যাডমিন!</b>\n\n"
             "⚙️ <b>কমান্ড:</b>\n"
+            "🔸 অটো আপলোড: <code>/autoupload on</code> অথবা <code>off</code>\n"
             "🔸 অ্যাডমিন প্যানেল: <code>/addadmin ID</code> | <code>/deladmin ID</code> | <code>/adminlist</code>\n"
             "🔸 ডাইরেক্ট লিংক: <code>/addlink লিংক</code> | <code>/dellink লিংক</code> | <code>/seelinks</code>\n"
             "🔸 অ্যাড জোন: <code>/setad ID</code> | অ্যাড সংখ্যা: <code>/setadcount সংখ্যা</code>\n"
@@ -246,6 +354,20 @@ def format_views(n):
     if n >= 1000000: return f"{n/1000000:.1f}M".replace(".0M", "M")
     if n >= 1000: return f"{n/1000:.1f}K".replace(".0K", "K")
     return str(n)
+
+@dp.message(Command("autoupload"))
+async def toggle_autoupload_cmd(m: types.Message):
+    if m.from_user.id not in admin_cache: return
+    try:
+        state = m.text.split(" ")[1].lower()
+        if state == "on":
+            await db.settings.update_one({"id": "auto_upload_mode"}, {"$set": {"status": True}}, upsert=True)
+            await m.answer("✅ <b>Auto Upload & Screenshot</b> চালু করা হয়েছে। এখন ভিডিও দিলেই অটোমেটিক প্রসেস হবে!", parse_mode="HTML")
+        elif state == "off":
+            await db.settings.update_one({"id": "auto_upload_mode"}, {"$set": {"status": False}}, upsert=True)
+            await m.answer("✅ Auto Upload বন্ধ করা হয়েছে। এখন ম্যানুয়াল সিস্টেমে (পোস্টার ও নাম দিয়ে) আপলোড হবে।", parse_mode="HTML")
+    except Exception: 
+        await m.answer("⚠️ সঠিক নিয়ম: <code>/autoupload on</code> অথবা <code>/autoupload off</code>", parse_mode="HTML")
 
 @dp.message(Command("addlink"))
 async def add_direct_link(m: types.Message):
@@ -562,15 +684,25 @@ async def handle_request_approval(c: types.CallbackQuery):
 
 
 # ==========================================
-# 9. Movie Upload Logic 
+# 9. Movie Upload Logic (Combined Auto & Manual)
 # ==========================================
 @dp.message(F.content_type.in_({'video', 'document'}), lambda m: m.from_user.id in admin_cache)
 async def receive_movie_file(m: types.Message, state: FSMContext):
-    fid = m.video.file_id if m.video else m.document.file_id
-    ftype = "video" if m.video else "document"
-    await state.set_state(AdminStates.waiting_for_photo)
-    await state.update_data(file_id=fid, file_type=ftype)
-    await m.answer("✅ ফাইল পেয়েছি! এবার মুভির <b>পোস্টার (Photo)</b> সেন্ড করুন।\nবাতিল করতে /start দিন।", parse_mode="HTML")
+    config = await db.settings.find_one({"id": "auto_upload_mode"})
+    is_auto = config["status"] if config else False
+    
+    if is_auto:
+        aiogram_fid = m.video.file_id if m.video else m.document.file_id
+        file_type = "video" if m.video else "document"
+        queue_size = video_queue.qsize()
+        await video_queue.put((m.chat.id, m.message_id, aiogram_fid, file_type))
+        await m.answer(f"✅ ভিডিওটি অটো-প্রসেস কিউ(Queue) তে যুক্ত হয়েছে! সিরিয়াল: <b>{queue_size + 1}</b>", parse_mode="HTML")
+    else:
+        fid = m.video.file_id if m.video else m.document.file_id
+        ftype = "video" if m.video else "document"
+        await state.set_state(AdminStates.waiting_for_photo)
+        await state.update_data(file_id=fid, file_type=ftype)
+        await m.answer("✅ ফাইল পেয়েছি! এবার মুভির <b>পোস্টার (Photo)</b> সেন্ড করুন।\nবাতিল করতে /start দিন।", parse_mode="HTML")
 
 @dp.message(AdminStates.waiting_for_photo, F.photo)
 async def receive_movie_photo(m: types.Message, state: FSMContext):
@@ -1175,7 +1307,7 @@ async def web_ui():
             </div>
         </div>
 
-        <!-- Direct Link RGB Modal -->
+        <!-- Strict Anti-Cheat Direct Link Modal -->
         <div id="directLinkModal" class="modal">
             <div class="modal-content" style="background: transparent; border: none; padding: 0;">
                 <div class="close-icon" onclick="document.getElementById('directLinkModal').style.display='none'" style="top: -15px; right: 5px; z-index: 1000;"><i class="fa-solid fa-xmark"></i></div>
@@ -1377,8 +1509,8 @@ async def web_ui():
             let selectedPayMethod = "";
 
             function formatViews(num) {
-                if (num >= 1000000) return (num / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
-                if (num >= 1000) return (num / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
+                if (num >= 1000000) return (num / 1000000).toFixed(1).replace(/\\.0$/, '') + 'M';
+                if (num >= 1000) return (num / 1000).toFixed(1).replace(/\\.0$/, '') + 'K';
                 return num.toString();
             }
 
@@ -1537,7 +1669,6 @@ async def web_ui():
                 } catch(e) {}
             }
 
-
             // --- MOVIE LOADING & UI LOGIC ---
             function drawSkeletons(count) { return Array(count).fill('<div class="skeleton"></div>').join(''); }
             function startAutoScroll() {
@@ -1648,15 +1779,30 @@ async def web_ui():
 
 
             // ==========================================
-            // DIRECT LINK AD LOGIC (REPLACED MONETAG)
+            // STRICT ANTI-CHEAT DIRECT LINK TIMER LOGIC
             // ==========================================
+            let linkOpenedAt = 0;
+            let isWaitingForReturn = false;
+            let dlTimerInterval = null;
+
             function showDirectLinkModal(descText) {
-                document.getElementById('dlDescText').innerHTML = descText;
+                document.getElementById('dlDescText').innerHTML = descText + "<br><br>⚠️ <b>সতর্কতা:</b> লিংকে গিয়ে <b>১৫ সেকেন্ড</b> অপেক্ষা না করে সাথে সাথে ফিরে এলে ভিডিও আনলক হবে না!";
                 const btn = document.getElementById('dlClickBtn');
                 btn.innerText = "🔗 Click Here (Open Link)";
                 btn.disabled = false;
                 btn.style.background = "linear-gradient(45deg, #ef4444, #f97316)";
                 document.getElementById('directLinkModal').style.display = 'flex';
+            }
+
+            function playVoiceAlert() {
+                try {
+                    if ("vibrate" in navigator) navigator.vibrate([200, 100, 200, 100, 200]);
+                    if ('speechSynthesis' in window) {
+                        let msg = new SpeechSynthesisUtterance("আপনার সময় শেষ হয়েছে, আপনি এখন ভিডিওটি দেখতে পারেন।");
+                        msg.lang = 'bn-BD';
+                        window.speechSynthesis.speak(msg);
+                    }
+                } catch(e) {}
             }
 
             function executeDirectLink() {
@@ -1669,22 +1815,48 @@ async def web_ui():
                 const randomLink = DIRECT_LINKS[Math.floor(Math.random() * DIRECT_LINKS.length)];
                 tg.openLink(randomLink);
 
+                linkOpenedAt = Date.now();
+                isWaitingForReturn = true;
+
                 const btn = document.getElementById('dlClickBtn');
                 btn.disabled = true;
                 let timeLeft = 15;
                 btn.innerText = `⏳ অপেক্ষা করুন... (${timeLeft}s)`;
                 btn.style.background = "#475569";
 
-                let dlTimer = setInterval(() => {
+                dlTimerInterval = setInterval(() => {
                     timeLeft--;
-                    btn.innerText = `⏳ অপেক্ষা করুন... (${timeLeft}s)`;
+                    if(timeLeft >= 0) {
+                        btn.innerText = `⏳ অপেক্ষা করুন... (${timeLeft}s)`;
+                    }
                     if (timeLeft <= 0) {
-                        clearInterval(dlTimer);
-                        document.getElementById('directLinkModal').style.display = 'none';
-                        if (onAdCompleteCallback) onAdCompleteCallback();
+                        clearInterval(dlTimerInterval);
+                        btn.innerText = `✅ সম্পন্ন হয়েছে!`;
                     }
                 }, 1000);
             }
+
+            // Strict Anti-Cheat Visibility Tracker (Checks when user returns to Telegram App)
+            document.addEventListener("visibilitychange", function() {
+                if (document.visibilityState === 'visible' && isWaitingForReturn) {
+                    isWaitingForReturn = false;
+                    if(dlTimerInterval) clearInterval(dlTimerInterval);
+                    
+                    let timeSpent = Date.now() - linkOpenedAt;
+                    
+                    if (timeSpent < 14000) { // 14 seconds tolerance
+                        tg.showAlert("⚠️ চিটিং ধরা পড়েছে! আপনি লিংকে যাওয়ার পর সাথে সাথে ফিরে এসেছেন। আপনাকে অবশ্যই পুরো ১৫ সেকেন্ড অপেক্ষা করতে হবে।");
+                        const btn = document.getElementById('dlClickBtn');
+                        btn.disabled = false;
+                        btn.innerText = "🔗 Click Here (Open Link)";
+                        btn.style.background = "linear-gradient(45deg, #ef4444, #f97316)";
+                    } else {
+                        playVoiceAlert();
+                        document.getElementById('directLinkModal').style.display = 'none';
+                        if (onAdCompleteCallback) onAdCompleteCallback();
+                    }
+                }
+            });
 
             function openQualityModal(title) {
                 const movie = loadedMovies[title];
@@ -1718,7 +1890,7 @@ async def web_ui():
                 } else { 
                     activeFileId = fileId; 
                     onAdCompleteCallback = () => sendFile(activeFileId);
-                    showDirectLinkModal("এই ভিডিও বা মুভিটি আনলক করতে নিচের বাটনে ক্লিক করুন। একটি নতুন পেইজ ওপেন হবে, সেখানে <b>১৫ সেকেন্ড</b> অপেক্ষা করুন। এরপর অটোমেটিক আপনার বটের ইনবক্সে মুভি চলে যাবে!");
+                    showDirectLinkModal("এই ভিডিওটি আনলক করতে নিচের বাটনে ক্লিক করুন। একটি নতুন পেইজ ওপেন হবে, সেখানে <b>১৫ সেকেন্ড</b> অপেক্ষা করুন। এরপর অটোমেটিক আপনার বটের ইনবক্সে ভিডিও চলে যাবে!");
                 }
             }
             
@@ -2481,7 +2653,9 @@ async def start():
     server = uvicorn.Server(config)
     
     print("Starting Background Workers...")
+    await pyro_app.start()  # <--- Pyrogram Started here
     asyncio.create_task(auto_delete_worker())
+    asyncio.create_task(video_queue_worker())  # <--- Auto Upload Queue Worker
     
     print("Connecting to Telegram Bot API...")
     await bot.delete_webhook(drop_pending_updates=True)
@@ -2491,4 +2665,4 @@ async def start():
 
 if __name__ == "__main__": 
     loop = asyncio.get_event_loop()
-    loop.run_until_complete(start())
+    loop.run_until_complete(start()
