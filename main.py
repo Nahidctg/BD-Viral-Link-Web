@@ -143,6 +143,8 @@ async def video_queue_worker():
     while True:
         chat_id, message_id, aiogram_file_id, file_type = await video_queue.get()
         is_processing = True
+        downloaded_file = None
+        collage_path = None
         try:
             admin_id = chat_id
             status_msg = await bot.send_message(admin_id, "⏳ <b>Processing Video...</b> (Downloading)")
@@ -153,16 +155,24 @@ async def video_queue_worker():
             serial_no = total_vids + 1
             auto_title = f"New Viral Video {serial_no:04d}"
             
-            video_path = f"temp_video_{serial_no}_{int(time.time())}.mp4"
-            collage_path = f"collage_{serial_no}_{int(time.time())}.jpg"
+            # ফাইলের নাম
+            video_name = f"temp_video_{serial_no}_{int(time.time())}.mp4"
+            collage_path = os.path.abspath(f"collage_{serial_no}_{int(time.time())}.jpg")
             
-            await pyro_app.download_media(pyro_msg, file_name=video_path)
+            # 🛑 FIX: Pyrogram আসল যে লোকেশনে ফাইলটি সেভ করেছে (downloads folder), সেটি downloaded_file ভেরিয়েবলে স্টোর হবে
+            downloaded_file = await pyro_app.download_media(pyro_msg, file_name=video_name)
             
+            if not downloaded_file:
+                await bot.edit_message_text("❌ ফাইল ডাউনলোড করতে সমস্যা হয়েছে।", chat_id=admin_id, message_id=status_msg.message_id)
+                continue
+                
             await bot.edit_message_text("📸 <b>Generating Screenshots...</b>", chat_id=admin_id, message_id=status_msg.message_id, parse_mode="HTML")
-            success = await generate_collage(video_path, collage_path)
+            
+            # 🛑 FIX: এখানে সরাসরি downloaded_file (আসল লোকেশন) পাঠানো হলো
+            success = await generate_collage(downloaded_file, collage_path)
             
             if not success:
-                await bot.edit_message_text("❌ Screenshot তৈরি করতে সমস্যা হয়েছে।", chat_id=admin_id, message_id=status_msg.message_id)
+                await bot.edit_message_text("❌ <b>Screenshot তৈরি করতে সমস্যা হয়েছে!</b>", chat_id=admin_id, message_id=status_msg.message_id, parse_mode="HTML")
                 continue
                 
             photo_msg = await bot.send_photo(admin_id, photo=FSInputFile(collage_path), caption=f"✅ <b>{auto_title}</b> Successfully Uploaded!")
@@ -176,15 +186,17 @@ async def video_queue_worker():
             
             await bot.delete_message(chat_id=admin_id, message_id=status_msg.message_id)
             
-            if os.path.exists(video_path): os.remove(video_path)
-            if os.path.exists(collage_path): os.remove(collage_path)
-            
         except Exception as e:
             await bot.send_message(chat_id, f"⚠️ Error processing video: {str(e)}")
         finally:
+            # 🛑 সার্ভারের মেমোরি ফুল হওয়া ঠেকাতে ফাইল ডিলিট
+            if downloaded_file and os.path.exists(downloaded_file): 
+                os.remove(downloaded_file)
+            if collage_path and os.path.exists(collage_path): 
+                os.remove(collage_path)
+                
             video_queue.task_done()
             is_processing = False
-
 
 # ==========================================
 # 3. Database Initialization & Caching
