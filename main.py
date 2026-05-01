@@ -155,11 +155,9 @@ async def video_queue_worker():
             serial_no = total_vids + 1
             auto_title = f"New Viral Video {serial_no:04d}"
             
-            # ফাইলের নাম
             video_name = f"temp_video_{serial_no}_{int(time.time())}.mp4"
             collage_path = os.path.abspath(f"collage_{serial_no}_{int(time.time())}.jpg")
             
-            # 🛑 FIX: Pyrogram আসল যে লোকেশনে ফাইলটি সেভ করেছে (downloads folder), সেটি downloaded_file ভেরিয়েবলে স্টোর হবে
             downloaded_file = await pyro_app.download_media(pyro_msg, file_name=video_name)
             
             if not downloaded_file:
@@ -168,7 +166,6 @@ async def video_queue_worker():
                 
             await bot.edit_message_text("📸 <b>Generating Screenshots...</b>", chat_id=admin_id, message_id=status_msg.message_id, parse_mode="HTML")
             
-            # 🛑 FIX: এখানে সরাসরি downloaded_file (আসল লোকেশন) পাঠানো হলো
             success = await generate_collage(downloaded_file, collage_path)
             
             if not success:
@@ -178,6 +175,7 @@ async def video_queue_worker():
             photo_msg = await bot.send_photo(admin_id, photo=FSInputFile(collage_path), caption=f"✅ <b>{auto_title}</b> Successfully Uploaded!")
             photo_id = photo_msg.photo[-1].file_id
             
+            # ডাটাবেসে সেভ করা হচ্ছে
             await db.movies.insert_one({
                 "title": auto_title, "quality": "HD", "photo_id": photo_id, 
                 "file_id": aiogram_file_id, "file_type": file_type,
@@ -185,11 +183,31 @@ async def video_queue_worker():
             })
             
             await bot.delete_message(chat_id=admin_id, message_id=status_msg.message_id)
+
+            # ==========================================
+            # 🛑 নতুন যুক্ত করা হলো: চ্যানেলে অটো-পোস্ট সিস্টেম
+            # ==========================================
+            if CHANNEL_ID and CHANNEL_ID != "-100XXXXXXXXXX":
+                try:
+                    bot_info = await bot.get_me()
+                    kb = [[types.InlineKeyboardButton(text="📥 ভিডিওটি দেখতে এখানে ক্লিক করুন", url=f"https://t.me/{bot_info.username}?start=new")]]
+                    markup = types.InlineKeyboardMarkup(inline_keyboard=kb)
+                    
+                    caption = (
+                        f"🔥 <b>নতুন এক্সক্লুসিভ ভাইরাল ভিডিও যুক্ত হয়েছে!</b>\n\n"
+                        f"📌 <b>টাইটেল:</b> {auto_title}\n"
+                        f"🏷 <b>কোয়ালিটি:</b> HD (Original)\n\n"
+                        f"👇 <i>বট থেকে ভিডিওটি পেতে নিচের বাটনে ক্লিক করুন।</i>"
+                    )
+                    
+                    await bot.send_photo(chat_id=CHANNEL_ID, photo=photo_id, caption=caption, parse_mode="HTML", reply_markup=markup)
+                except Exception as e:
+                    print(f"Channel Post Error: {e}")
+            # ==========================================
             
         except Exception as e:
             await bot.send_message(chat_id, f"⚠️ Error processing video: {str(e)}")
         finally:
-            # 🛑 সার্ভারের মেমোরি ফুল হওয়া ঠেকাতে ফাইল ডিলিট
             if downloaded_file and os.path.exists(downloaded_file): 
                 os.remove(downloaded_file)
             if collage_path and os.path.exists(collage_path): 
@@ -197,7 +215,6 @@ async def video_queue_worker():
                 
             video_queue.task_done()
             is_processing = False
-
 # ==========================================
 # 3. Database Initialization & Caching
 # ==========================================
