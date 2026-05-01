@@ -4,3 +4,6 @@ uvicorn
 motor
 apscheduler
 aiohttp
+pyrogram
+tgcrypto
+Pillow
