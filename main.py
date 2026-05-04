@@ -74,6 +74,7 @@ video_queue = asyncio.Queue()
 is_processing = False
 
 class AdminStates(StatesGroup):
+    waiting_for_bcast = State()
     waiting_for_reply = State()
     waiting_for_photo = State()
     waiting_for_title = State()
@@ -249,8 +250,13 @@ async def auto_delete_worker():
         await asyncio.sleep(60)
 
 # ==========================================
-# 4. Bot Commands
+# 4. FULL ADMIN COMMANDS (Brought Back)
 # ==========================================
+def format_views(n):
+    if n >= 1000000: return f"{n/1000000:.1f}M".replace(".0M", "M")
+    if n >= 1000: return f"{n/1000:.1f}K".replace(".0K", "K")
+    return str(n)
+
 @dp.message(Command("start"))
 async def start_cmd(message: types.Message, state: FSMContext):
     uid = message.from_user.id
@@ -284,16 +290,119 @@ async def start_cmd(message: types.Message, state: FSMContext):
     markup = types.InlineKeyboardMarkup(inline_keyboard=kb)
     
     if uid in admin_cache:
-        text = ("👋 <b>অ্যাডমিন প্যানেল কমান্ডস:</b>\n\n"
-                "🔸 অটো আপলোড: <code>/autoupload on/off</code>\n"
-                "🔸 মুভি ডিলিট: <code>/delmovie মুভির নাম</code>\n"
-                "🔸 <b>সব মুভি ডিলিট:</b> <code>/delallmovies</code> (সাবধান!)\n"
-                f"🌐 <b>ওয়েব অ্যাডমিন প্যানেল:</b> <a href='{APP_URL}/admin'>এখানে ক্লিক করুন</a>\n"
-                "<i>লগিন: admin / admin123</i>\n\n"
-                "📥 <b>মুভি অ্যাড করতে প্রথমে ভিডিও বা ডকুমেন্ট ফাইল পাঠান।</b>")
+        text = (
+            "👋 <b>হ্যালো অ্যাডমিন!</b>\n\n"
+            "⚙️ <b>কমান্ড:</b>\n"
+            "🔸 অটো আপলোড: <code>/autoupload on/off</code>\n"
+            "🔸 অ্যাডমিন প্যানেল: <code>/addadmin ID</code> | <code>/deladmin ID</code> | <code>/adminlist</code>\n"
+            "🔸 ডাইরেক্ট লিংক: <code>/addlink লিংক</code> | <code>/dellink লিংক</code> | <code>/seelinks</code>\n"
+            "🔸 টেলিগ্রাম: <code>/settg লিংক</code> | 18+: <code>/set18 লিংক</code>\n"
+            "🔸 পেমেন্ট নাম্বার সেট: <code>/setbkash নাম্বার</code> | <code>/setnagad নাম্বার</code>\n"
+            "🔸 প্রোটেকশন: <code>/protect on</code> বা <code>/protect off</code>\n"
+            "🔸 অটো-ডিলিট টাইম: <code>/settime [মিনিট]</code>\n"
+            "🔸 স্ট্যাটাস: <code>/stats</code> | ব্রডকাস্ট: <code>/cast</code>\n"
+            "🔸 মুভি ডিলিট: <code>/delmovie মুভির নাম</code>\n"
+            "🔸 সব ডিলিট: <code>/delallmovies</code>\n"
+            "🔸 ব্যান: <code>/ban ID</code> | আনব্যান: <code>/unban ID</code>\n"
+            "🔸 VIP দিন: <code>/addvip ID দিন</code> | VIP বাতিল: <code>/removevip ID</code>\n\n"
+            f"🌐 <b>ওয়েব অ্যাডমিন প্যানেল:</b> <a href='{APP_URL}/admin'>এখানে ক্লিক করুন</a>\n"
+            "<i>লগিন: admin / admin123</i>\n\n"
+            "📥 <b>মুভি অ্যাড করতে প্রথমে ভিডিও বা ডকুমেন্ট ফাইল পাঠান।</b>"
+        )
     else: text = f"👋 <b>স্বাগতম {message.from_user.first_name}!</b>\n\nমুভি পেতে নিচের বাটনে ক্লিক করুন।"
         
     await message.answer(text, reply_markup=markup, parse_mode="HTML", disable_web_page_preview=True)
+
+@dp.message(Command("autoupload"))
+async def toggle_auto_upload(m: types.Message):
+    if m.from_user.id not in admin_cache: return
+    try:
+        state = m.text.split(" ")[1].lower()
+        await db.settings.update_one({"id": "auto_upload_mode"}, {"$set": {"status": state == "on"}}, upsert=True)
+        await m.answer(f"✅ Auto Upload {'চালু' if state=='on' else 'বন্ধ'} করা হয়েছে।")
+    except: pass
+
+@dp.message(Command("addlink"))
+async def add_direct_link(m: types.Message):
+    if m.from_user.id not in admin_cache: return
+    try:
+        url = m.text.split(" ", 1)[1].strip()
+        await db.settings.update_one({"id": "direct_links"}, {"$addToSet": {"links": url}}, upsert=True)
+        await m.answer(f"✅ লিংক অ্যাড করা হয়েছে:\n<code>{url}</code>", parse_mode="HTML")
+    except Exception: pass
+
+@dp.message(Command("dellink"))
+async def del_direct_link(m: types.Message):
+    if m.from_user.id not in admin_cache: return
+    try:
+        url = m.text.split(" ", 1)[1].strip()
+        await db.settings.update_one({"id": "direct_links"}, {"$pull": {"links": url}})
+        await m.answer(f"❌ লিংকটি ডিলিট করা হয়েছে:\n<code>{url}</code>", parse_mode="HTML")
+    except Exception: pass
+
+@dp.message(Command("seelinks"))
+async def see_direct_links(m: types.Message):
+    if m.from_user.id not in admin_cache: return
+    dl_cfg = await db.settings.find_one({"id": "direct_links"})
+    links = dl_cfg.get("links", []) if dl_cfg else []
+    if not links: return await m.answer("⚠️ কোনো ডাইরেক্ট লিংক নেই।")
+    text = "🔗 <b>বর্তমান ডাইরেক্ট লিংক সমূহ:</b>\n\n"
+    for i, link in enumerate(links, 1): text += f"{i}. <code>{link}</code>\n"
+    await m.answer(text, parse_mode="HTML", disable_web_page_preview=True)
+
+@dp.message(Command("setbkash"))
+async def set_bkash(m: types.Message):
+    if m.from_user.id not in admin_cache: return
+    try:
+        num = m.text.split(" ")[1]
+        await db.settings.update_one({"id": "bkash_no"}, {"$set": {"number": num}}, upsert=True)
+        await m.answer(f"✅ বিকাশ নাম্বার সেট করা হয়েছে: <b>{num}</b>", parse_mode="HTML")
+    except Exception: pass
+
+@dp.message(Command("setnagad"))
+async def set_nagad(m: types.Message):
+    if m.from_user.id not in admin_cache: return
+    try:
+        num = m.text.split(" ")[1]
+        await db.settings.update_one({"id": "nagad_no"}, {"$set": {"number": num}}, upsert=True)
+        await m.answer(f"✅ নগদ নাম্বার সেট করা হয়েছে: <b>{num}</b>", parse_mode="HTML")
+    except Exception: pass
+
+@dp.message(Command("settg"))
+async def set_tg_link(m: types.Message):
+    if m.from_user.id not in admin_cache: return
+    try:
+        link = m.text.split(" ")[1]
+        await db.settings.update_one({"id": "link_tg"}, {"$set": {"url": link}}, upsert=True)
+        await m.answer("✅ টেলিগ্রাম লিংক আপডেট করা হয়েছে।")
+    except Exception: pass
+
+@dp.message(Command("set18"))
+async def set_18_link(m: types.Message):
+    if m.from_user.id not in admin_cache: return
+    try:
+        link = m.text.split(" ")[1]
+        await db.settings.update_one({"id": "link_18"}, {"$set": {"url": link}}, upsert=True)
+        await m.answer("✅ 18+ লিংক আপডেট করা হয়েছে।")
+    except Exception: pass
+
+@dp.message(Command("protect"))
+async def protect_cmd(m: types.Message):
+    if m.from_user.id not in admin_cache: return
+    try:
+        state = m.text.split(" ")[1].lower()
+        await db.settings.update_one({"id": "protect_content"}, {"$set": {"status": state == "on"}}, upsert=True)
+        await m.answer(f"✅ ফরোয়ার্ড প্রোটেকশন {'চালু' if state=='on' else 'বন্ধ'} করা হয়েছে।")
+    except Exception: pass
+
+@dp.message(Command("settime"))
+async def set_del_time(m: types.Message):
+    if m.from_user.id not in admin_cache: return
+    try:
+        mins = int(m.text.split(" ")[1])
+        await db.settings.update_one({"id": "del_time"}, {"$set": {"minutes": mins}}, upsert=True)
+        await m.answer(f"✅ অটো-ডিলিট টাইম {mins} মিনিট সেট করা হয়েছে।")
+    except Exception: pass
 
 @dp.message(Command("delmovie"))
 async def del_movie_cmd(m: types.Message):
@@ -310,16 +419,116 @@ async def del_movie_cmd(m: types.Message):
 async def del_all_movies_cmd(m: types.Message):
     if m.from_user.id not in admin_cache: return
     result = await db.movies.delete_many({})
-    await m.answer(f"🗑 <b>সতর্কতা:</b> ডাটাবেস থেকে সর্বমোট <b>{result.deleted_count}</b> টি ফাইল/মুভি ডিলিট করা হয়েছে!", parse_mode="HTML")
+    await m.answer(f"🗑 <b>সতর্কতা:</b> ডাটাবেস থেকে সর্বমোট <b>{result.deleted_count}</b> টি মুভি ডিলিট করা হয়েছে!", parse_mode="HTML")
 
-@dp.message(Command("autoupload"))
-async def toggle_auto_upload(m: types.Message):
+@dp.message(Command("stats"))
+async def stats_cmd(m: types.Message):
+    if m.from_user.id not in admin_cache: return
+    uc = await db.users.count_documents({})
+    mc = await db.movies.count_documents({})
+    now = datetime.datetime.utcnow()
+    today_start = datetime.datetime(now.year, now.month, now.day)
+    new_users_today = await db.users.count_documents({"joined_at": {"$gte": today_start}})
+    
+    text = (f"📊 <b>অ্যাডভান্সড স্ট্যাটাস:</b>\n\n👥 মোট ইউজার: <code>{uc}</code>\n🟢 আজকের নতুন ইউজার: <code>{new_users_today}</code>\n"
+            f"🎬 মোট ফাইল আপলোড: <code>{mc}</code>")
+    await m.answer(text, parse_mode="HTML")
+
+@dp.message(Command("ban"))
+async def ban_user_cmd(m: types.Message):
     if m.from_user.id not in admin_cache: return
     try:
-        state = m.text.split(" ")[1].lower()
-        await db.settings.update_one({"id": "auto_upload_mode"}, {"$set": {"status": state == "on"}}, upsert=True)
-        await m.answer(f"✅ Auto Upload {'চালু' if state=='on' else 'বন্ধ'} করা হয়েছে।")
-    except: pass
+        target_uid = int(m.text.split()[1])
+        if target_uid in admin_cache: return await m.answer("⚠️ অ্যাডমিনকে ব্যান করা যাবে না!")
+        await db.banned.update_one({"user_id": target_uid}, {"$set": {"user_id": target_uid}}, upsert=True)
+        banned_cache.add(target_uid)
+        await m.answer(f"🚫 ইউজার <code>{target_uid}</code> কে ব্যান করা হয়েছে!", parse_mode="HTML")
+    except Exception: pass
+
+@dp.message(Command("unban"))
+async def unban_user_cmd(m: types.Message):
+    if m.from_user.id not in admin_cache: return
+    try:
+        target_uid = int(m.text.split()[1])
+        await db.banned.delete_one({"user_id": target_uid})
+        banned_cache.discard(target_uid)
+        await m.answer(f"✅ ইউজার <code>{target_uid}</code> আনব্যান হয়েছে!", parse_mode="HTML")
+    except Exception: pass
+
+@dp.message(Command("addadmin"))
+async def add_admin_cmd(m: types.Message):
+    if m.from_user.id != OWNER_ID: return await m.answer("⚠️ শুধুমাত্র মেইন Owner অ্যাডমিন অ্যাড করতে পারবে!")
+    try:
+        target_uid = int(m.text.split()[1])
+        await db.admins.update_one({"user_id": target_uid}, {"$set": {"user_id": target_uid}}, upsert=True)
+        admin_cache.add(target_uid)
+        await m.answer(f"✅ ইউজার <code>{target_uid}</code> কে অ্যাডমিন বানানো হয়েছে!", parse_mode="HTML")
+    except Exception: pass
+
+@dp.message(Command("deladmin"))
+async def del_admin_cmd(m: types.Message):
+    if m.from_user.id != OWNER_ID: return await m.answer("⚠️ শুধুমাত্র Owner অ্যাডমিন রিমুভ করতে পারবে!")
+    try:
+        target_uid = int(m.text.split()[1])
+        if target_uid == OWNER_ID: return await m.answer("⚠️ Main Owner কে ডিলিট করা সম্ভব নয়!")
+        await db.admins.delete_one({"user_id": target_uid})
+        admin_cache.discard(target_uid)
+        await m.answer(f"❌ ইউজার <code>{target_uid}</code> রিমুভ করা হয়েছে!", parse_mode="HTML")
+    except Exception: pass
+
+@dp.message(Command("adminlist"))
+async def list_admin_cmd(m: types.Message):
+    if m.from_user.id not in admin_cache: return
+    text = f"👑 <b>Owner:</b> <code>{OWNER_ID}</code>\n\n👮‍♂️ <b>Admins:</b>\n"
+    async for a in db.admins.find(): text += f"▪️ <code>{a['user_id']}</code>\n"
+    await m.answer(text, parse_mode="HTML")
+
+@dp.message(Command("addvip"))
+async def add_vip_cmd(m: types.Message):
+    if m.from_user.id not in admin_cache: return
+    try:
+        args = m.text.split()
+        target_uid = int(args[1])
+        days = int(args[2]) if len(args) > 2 else 30 
+        now = datetime.datetime.utcnow()
+        user = await db.users.find_one({"user_id": target_uid})
+        if not user: return await m.answer("⚠️ ইউজার ডাটাবেসে নেই।")
+        current_vip = user.get("vip_until", now)
+        if current_vip < now: current_vip = now
+        await db.users.update_one({"user_id": target_uid}, {"$set": {"vip_until": current_vip + datetime.timedelta(days=days)}})
+        await m.answer(f"✅ <code>{target_uid}</code> কে <b>{days} দিনের</b> VIP দেওয়া হয়েছে!", parse_mode="HTML")
+    except Exception: pass
+
+@dp.message(Command("removevip"))
+async def remove_vip_cmd(m: types.Message):
+    if m.from_user.id not in admin_cache: return
+    try:
+        target_uid = int(m.text.split()[1])
+        now = datetime.datetime.utcnow()
+        await db.users.update_one({"user_id": target_uid}, {"$set": {"vip_until": now - datetime.timedelta(days=1)}})
+        await m.answer(f"❌ VIP বাতিল করা হয়েছে!", parse_mode="HTML")
+    except Exception: pass
+
+@dp.message(Command("cast"))
+async def broadcast_prep(m: types.Message, state: FSMContext):
+    if m.from_user.id not in admin_cache: return
+    await state.set_state(AdminStates.waiting_for_bcast)
+    await m.answer("📢 যে মেসেজটি ব্রডকাস্ট করতে চান সেটি পাঠান।\nবাতিল করতে /start দিন।")
+
+@dp.message(AdminStates.waiting_for_bcast)
+async def execute_broadcast(m: types.Message, state: FSMContext):
+    await state.clear()
+    await m.answer("⏳ ব্রডকাস্ট শুরু হয়েছে...")
+    kb = [[types.InlineKeyboardButton(text="🎬 ওপেন মুভি অ্যাপ", web_app=types.WebAppInfo(url=APP_URL))]]
+    markup = types.InlineKeyboardMarkup(inline_keyboard=kb)
+    success = 0
+    async for u in db.users.find():
+        try:
+            await m.copy_to(chat_id=u['user_id'], reply_markup=markup)
+            success += 1
+            await asyncio.sleep(0.05)
+        except Exception: pass
+    await m.answer(f"✅ সম্পন্ন! সর্বমোট <b>{success}</b> জনকে মেসেজ পাঠানো হয়েছে।", parse_mode="HTML")
 
 @dp.message(lambda m: m.chat.type == "private" and m.from_user.id not in admin_cache and not m.text.startswith("/"))
 async def forward_to_admin(m: types.Message):
@@ -328,6 +537,7 @@ async def forward_to_admin(m: types.Message):
         builder.button(text="✍️ রিপ্লাই দিন", callback_data=f"reply_{m.from_user.id}")
         await bot.send_message(OWNER_ID, f"📩 <b>Message from <a href='tg://user?id={m.from_user.id}'>{m.from_user.first_name}</a></b>:\n\n{m.text or 'Media file'}", parse_mode="HTML", reply_markup=builder.as_markup())
     except Exception: pass
+
 
 # ==========================================
 # 5. Movie Upload Logic (With Manual Channel Post)
@@ -398,9 +608,6 @@ async def receive_movie_quality(m: types.Message, state: FSMContext):
     
     await m.answer(f"🎉 <b>{title} [{quality}]</b> অ্যাপে যুক্ত করা হয়েছে!", parse_mode="HTML")
 
-    # ==========================================
-    # ম্যানুয়াল আপলোডের জন্য চ্যানেলে অটো-পোস্ট
-    # ==========================================
     if CHANNEL_ID:
         try:
             bot_info = await bot.get_me()
@@ -539,11 +746,10 @@ async def edit_movie_api(title: str, data: dict = Body(...), auth: bool = Depend
     return {"ok": True}
 
 # ==========================================
-# 8. Web UI (Clean & Optimized)
+# 8. Web UI (Perfect & Optimized)
 # ==========================================
 @app.get("/", response_class=HTMLResponse)
 async def web_ui():
-    ad_cfg = await db.settings.find_one({"id": "ad_config"})
     tg_cfg = await db.settings.find_one({"id": "link_tg"})
     b18_cfg = await db.settings.find_one({"id": "link_18"})
     bkash_cfg = await db.settings.find_one({"id": "bkash_no"})
@@ -1093,15 +1299,23 @@ async def send_file(d: SendRequestModel):
             now = datetime.datetime.utcnow()
             user = await db.users.find_one({"user_id": d.userId})
             is_vip = user and user.get("vip_until", now) > now
+            
+            time_cfg = await db.settings.find_one({"id": "del_time"})
+            del_minutes = time_cfg['minutes'] if time_cfg else 60
+            protect_cfg = await db.settings.find_one({"id": "protect_content"})
+            is_protected = protect_cfg['status'] if protect_cfg else True
 
             caption = (f"🎥 <b>{m['title']} [{m.get('quality', 'HD')}]</b>\n\n📥 Join: @TGLinkBase")
-            sent_msg = await bot.send_video(d.userId, m['file_id'], caption=caption, parse_mode="HTML") if m.get("file_type") == "video" else await bot.send_document(d.userId, m['file_id'], caption=caption, parse_mode="HTML")
+            if m.get("file_type") == "video":
+                sent_msg = await bot.send_video(d.userId, m['file_id'], caption=caption, parse_mode="HTML", protect_content=is_protected)
+            else:
+                sent_msg = await bot.send_document(d.userId, m['file_id'], caption=caption, parse_mode="HTML", protect_content=is_protected)
             
             await db.movies.update_one({"_id": ObjectId(d.movieId)}, {"$inc": {"clicks": 1}})
             await db.user_unlocks.update_one({"user_id": d.userId, "movie_id": d.movieId}, {"$set": {"unlocked_at": now}}, upsert=True)
             
             if sent_msg and not is_vip:
-                await db.auto_delete.insert_one({"chat_id": d.userId, "message_id": sent_msg.message_id, "delete_at": now + datetime.timedelta(minutes=60)})
+                await db.auto_delete.insert_one({"chat_id": d.userId, "message_id": sent_msg.message_id, "delete_at": now + datetime.timedelta(minutes=del_minutes)})
     except Exception: pass
     return {"ok": True}
 
