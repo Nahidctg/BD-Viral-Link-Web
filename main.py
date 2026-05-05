@@ -250,7 +250,7 @@ async def auto_delete_worker():
         await asyncio.sleep(60)
 
 # ==========================================
-# 4. FULL ADMIN COMMANDS (Brought Back)
+# 4. FULL ADMIN COMMANDS
 # ==========================================
 def format_views(n):
     if n >= 1000000: return f"{n/1000000:.1f}M".replace(".0M", "M")
@@ -792,8 +792,11 @@ async def web_ui():
             
             .menu-btn { background: #1e293b; border: 1px solid #334155; padding: 8px 12px; border-radius: 8px; cursor: pointer; color: white; font-size: 18px; }
             
-            .dropdown-menu { display: none; position: absolute; top: 65px; right: 15px; background: #1e293b; border: 1px solid #334155; border-radius: 12px; overflow: hidden; box-shadow: 0 5px 20px rgba(0,0,0,0.5); z-index: 2000; width: 220px; }
-            .dropdown-menu a { display: block; padding: 12px 15px; color: white; text-decoration: none; font-weight: bold; font-size: 15px; border-bottom: 1px solid #334155; cursor: pointer; }
+            .dropdown-menu { display: none; position: absolute; top: 65px; right: 15px; background: rgba(15, 23, 42, 0.98); backdrop-filter: blur(10px); border: 1px solid #334155; border-radius: 12px; overflow: hidden; box-shadow: 0 10px 25px rgba(0,0,0,0.5); z-index: 2000; width: 240px; transform-origin: top right; animation: menuFade 0.2s ease-out forwards; }
+            @keyframes menuFade { 0% { opacity: 0; transform: scale(0.95) translateY(-10px); } 100% { opacity: 1; transform: scale(1) translateY(0); } }
+            .dropdown-menu a { display: flex; align-items: center; gap: 10px; padding: 12px 15px; color: white; text-decoration: none; font-weight: 600; font-size: 14px; cursor: pointer; transition: background 0.2s ease; border-bottom: 1px solid #334155; }
+            .dropdown-menu a:hover, .dropdown-menu a:active { background: rgba(51, 65, 85, 0.5); }
+            .dropdown-menu a i { font-size: 16px; width: 20px; text-align: center; }
             
             .search-box { padding: 15px; }
             .search-input { width: 100%; padding: 16px; border-radius: 25px; border: none; outline: none; text-align: center; background: #1e293b; color: #fff; font-size: 18px; font-weight: bold; }
@@ -825,10 +828,20 @@ async def web_ui():
             .ep-badge { top: 10px; right: 10px; background: #10b981; }
 
             /* Clean Pagination */
-            .pagination { display: flex; justify-content: center; align-items: center; gap: 8px; padding: 10px 15px 120px; flex-wrap: wrap; }
+            .pagination { display: flex; justify-content: center; align-items: center; gap: 8px; padding: 10px 15px 30px; flex-wrap: wrap; }
             .page-btn { background: #1e293b; color: #fff; border: 1px solid #334155; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-weight: bold; outline: none; transition: 0.2s;}
             .page-btn:hover { background: #334155; }
             .page-btn.active { background: #f87171; border-color: #f87171; color: white; }
+
+            /* Premium Developer Credit Section */
+            .developer-credit { margin: 10px 15px 110px; padding: 22px 15px; background: linear-gradient(135deg, rgba(30, 41, 59, 0.8), rgba(15, 23, 42, 0.95)); border: 1px solid rgba(56, 189, 248, 0.2); border-radius: 16px; text-align: center; box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4), 0 0 15px rgba(56, 189, 248, 0.1); backdrop-filter: blur(10px); position: relative; overflow: hidden; }
+            .developer-credit::before { content: ''; position: absolute; top: 0; left: -100%; width: 50%; height: 100%; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.08), transparent); animation: shine 3s infinite; }
+            @keyframes shine { 100% { left: 200%; } }
+            .dev-title { font-size: 12px; color: #94a3b8; font-weight: 700; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 5px; }
+            .dev-name { font-size: 22px; font-weight: 900; background: linear-gradient(45deg, #00f2fe, #4facfe); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 8px; }
+            .dev-desc { font-size: 13.5px; color: #cbd5e1; margin-bottom: 18px; line-height: 1.5; }
+            .dev-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; background: linear-gradient(45deg, #0ea5e9, #2563eb); color: white; padding: 12px 24px; border-radius: 30px; font-size: 15px; font-weight: bold; border: none; cursor: pointer; box-shadow: 0 4px 15px rgba(37, 99, 235, 0.4); transition: 0.2s; position: relative; z-index: 10; }
+            .dev-btn:active { transform: scale(0.95); }
 
             .floating-btn { position: fixed; right: 20px; color: white; width: 50px; height: 50px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 22px; z-index: 500; cursor: pointer; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
             .btn-18 { bottom: 155px; background: linear-gradient(45deg, #ff0000, #990000); font-weight: bold; font-size: 18px; border: 2px solid white; }
@@ -867,10 +880,29 @@ async def web_ui():
             </div>
         </header>
         
+        <!-- Enhanced Premium Dropdown Menu -->
         <div id="dropdownMenu" class="dropdown-menu">
+            <div style="padding: 12px 15px; border-bottom: 1px solid #334155; display: flex; align-items: center; gap: 10px;">
+                <div style="width: 35px; height: 35px; background: #3b82f6; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 18px;">
+                    <i class="fa-solid fa-user"></i>
+                </div>
+                <div>
+                    <div style="font-size: 14px; font-weight: bold; color: white;" id="menuUname">Guest</div>
+                    <div style="font-size: 11px; color: #94a3b8;" id="menuStatus">Free User</div>
+                </div>
+            </div>
+            
             <a onclick="openVipModal()"><i class="fa-solid fa-crown text-yellow-400"></i> VIP প্যাকেজ কিনুন</a>
-            <a onclick="openReferModal()"><i class="fa-solid fa-share-nodes text-blue-400"></i> রেফার করুন</a>
+            <a onclick="openReferModal()"><i class="fa-solid fa-share-nodes text-blue-400"></i> রেফার ও ইনকাম</a>
             <a onclick="openReqModal()"><i class="fa-solid fa-code-pull-request text-green-400"></i> রিকোয়েস্ট মুভি</a>
+            
+            <div style="height: 1px; background: #334155; margin: 4px 0;"></div>
+            
+            <a onclick="tg.showAlert('ডাউনলোডের নিয়ম:\n১. ডাউনলোড বাটনে ক্লিক করুন।\n২. ১৫ সেকেন্ড অপেক্ষা করুন।\n৩. ভিডিওটি অটোমেটিক বটের ইনবক্সে চলে যাবে!')"><i class="fa-solid fa-circle-question text-red-400"></i> ডাউনলোডের নিয়ম</a>
+            <a onclick="window.open('{{TG_LINK}}')"><i class="fa-solid fa-bullhorn text-green-400"></i> আমাদের চ্যানেল</a>
+            <a onclick="window.open('https://t.me/YourSupportUsername')"><i class="fa-brands fa-telegram text-blue-400"></i> সাপোর্ট / কন্টাক্ট</a>
+            
+            <a href="/admin" id="adminMenuBtn" style="display: none; color: #ef4444;"><i class="fa-solid fa-screwdriver-wrench"></i> অ্যাডমিন প্যানেল</a>
         </div>
 
         <div class="search-box">
@@ -886,6 +918,16 @@ async def web_ui():
         <div class="section-title" id="recentTitle"><i class="fa-solid fa-clock-rotate-left text-blue-400"></i> সর্বশেষ আপলোড</div>
         <div class="grid" id="movieGrid"></div>
         <div class="pagination" id="paginationBox"></div>
+        
+        <!-- Developer Credit Section -->
+        <div class="developer-credit">
+            <div class="dev-title"><i class="fa-solid fa-laptop-code"></i> Developed & Deployed By</div>
+            <div class="dev-name">YOUR BRAND NAME</div>
+            <div class="dev-desc">আপনিও কি আপনার চ্যানেল বা গ্রুপের জন্য এমন হাই-কোয়ালিটি এবং প্রিমিয়াম মুভি বট বানাতে চান? আজই আমাদের সাথে যোগাযোগ করুন।</div>
+            <button class="dev-btn" onclick="window.open('https://t.me/YourTelegramUsername', '_blank')">
+                <i class="fa-brands fa-telegram"></i> Contact Developer
+            </button>
+        </div>
 
         <div class="floating-btn btn-18" onclick="window.open('{{LINK_18}}')">18+</div>
         <div class="floating-btn btn-tg" onclick="window.open('{{TG_LINK}}')"><i class="fa-brands fa-telegram"></i></div>
@@ -1000,7 +1042,20 @@ async def web_ui():
                     const res = await fetch('/api/user/' + uid);
                     const data = await res.json();
                     isUserVip = data.vip;
-                    if(isUserVip) document.getElementById('vipBadge').style.display = 'inline-block';
+                    
+                    let firstName = tg.initDataUnsafe?.user?.first_name || 'Guest';
+                    document.getElementById('menuUname').innerText = firstName;
+                    
+                    if(isUserVip) {
+                        document.getElementById('vipBadge').style.display = 'inline-block';
+                        document.getElementById('menuStatus').innerText = '👑 VIP User';
+                        document.getElementById('menuStatus').style.color = '#fbbf24';
+                    }
+                    
+                    if(data.admin) {
+                        document.getElementById('adminMenuBtn').style.display = 'flex';
+                    }
+
                     document.getElementById('refLinkText').innerText = `https://t.me/${BOT_UNAME}?start=ref_${uid}`;
                 } catch(e) {}
             }
@@ -1200,8 +1255,9 @@ async def web_ui():
 @app.get("/api/user/{uid}")
 async def get_user_info(uid: int):
     user = await db.users.find_one({"user_id": uid})
-    if not user: return {"vip": False}
-    return {"vip": user.get("vip_until", datetime.datetime.utcnow()) > datetime.datetime.utcnow()}
+    is_admin = uid in admin_cache
+    if not user: return {"vip": False, "admin": is_admin}
+    return {"vip": user.get("vip_until", datetime.datetime.utcnow()) > datetime.datetime.utcnow(), "admin": is_admin}
 
 class PaymentModel(BaseModel):
     uid: int
