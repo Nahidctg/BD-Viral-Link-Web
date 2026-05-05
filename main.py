@@ -900,7 +900,7 @@ async def web_ui():
             
             <a onclick="tg.showAlert('ডাউনলোডের নিয়ম:\n১. ডাউনলোড বাটনে ক্লিক করুন।\n২. ১৫ সেকেন্ড অপেক্ষা করুন।\n৩. ভিডিওটি অটোমেটিক বটের ইনবক্সে চলে যাবে!')"><i class="fa-solid fa-circle-question text-red-400"></i> ডাউনলোডের নিয়ম</a>
             <a onclick="window.open('{{TG_LINK}}')"><i class="fa-solid fa-bullhorn text-green-400"></i> আমাদের চ্যানেল</a>
-            <a onclick="window.open('https://t.me/YourSupportUsername')"><i class="fa-brands fa-telegram text-blue-400"></i> সাপোর্ট / কন্টাক্ট</a>
+            <a onclick="window.open('https://t.me/+XNsVK-PCgVA4ZDA9')"><i class="fa-brands fa-telegram text-blue-400"></i> সাপোর্ট / কন্টাক্ট</a>
             
             <a href="/admin" id="adminMenuBtn" style="display: none; color: #ef4444;"><i class="fa-solid fa-screwdriver-wrench"></i> অ্যাডমিন প্যানেল</a>
         </div>
