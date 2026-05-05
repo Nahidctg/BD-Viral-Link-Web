@@ -297,12 +297,11 @@ async def start_cmd(message: types.Message, state: FSMContext):
             "🔸 অ্যাডমিন প্যানেল: <code>/addadmin ID</code> | <code>/deladmin ID</code> | <code>/adminlist</code>\n"
             "🔸 ডাইরেক্ট লিংক: <code>/addlink লিংক</code> | <code>/dellink লিংক</code> | <code>/seelinks</code>\n"
             "🔸 টেলিগ্রাম: <code>/settg লিংক</code> | 18+: <code>/set18 লিংক</code>\n"
-            "🔸 পেমেন্ট নাম্বার সেট: <code>/setbkash নাম্বার</code> | <code>/setnagad নাম্বার</code>\n"
-            "🔸 প্রোটেকশন: <code>/protect on</code> বা <code>/protect off</code>\n"
-            "🔸 অটো-ডিলিট টাইম: <code>/settime [মিনিট]</code>\n"
+            "🔸 সাপোর্ট লিংক: <code>/setsupport লিংক</code>\n"
+            "🔸 পেমেন্ট নাম্বার: <code>/setbkash নাম্বার</code> | <code>/setnagad নাম্বার</code>\n"
+            "🔸 প্রোটেকশন: <code>/protect on/off</code> | অটো-ডিলিট: <code>/settime [মিনিট]</code>\n"
             "🔸 স্ট্যাটাস: <code>/stats</code> | ব্রডকাস্ট: <code>/cast</code>\n"
-            "🔸 মুভি ডিলিট: <code>/delmovie মুভির নাম</code>\n"
-            "🔸 সব ডিলিট: <code>/delallmovies</code>\n"
+            "🔸 মুভি ডিলিট: <code>/delmovie মুভির নাম</code> | <code>/delallmovies</code>\n"
             "🔸 ব্যান: <code>/ban ID</code> | আনব্যান: <code>/unban ID</code>\n"
             "🔸 VIP দিন: <code>/addvip ID দিন</code> | VIP বাতিল: <code>/removevip ID</code>\n\n"
             f"🌐 <b>ওয়েব অ্যাডমিন প্যানেল:</b> <a href='{APP_URL}/admin'>এখানে ক্লিক করুন</a>\n"
@@ -374,7 +373,16 @@ async def set_tg_link(m: types.Message):
     try:
         link = m.text.split(" ")[1]
         await db.settings.update_one({"id": "link_tg"}, {"$set": {"url": link}}, upsert=True)
-        await m.answer("✅ টেলিগ্রাম লিংক আপডেট করা হয়েছে।")
+        await m.answer("✅ টেলিগ্রাম চ্যানেল লিংক আপডেট করা হয়েছে।")
+    except Exception: pass
+
+@dp.message(Command("setsupport"))
+async def set_support_link(m: types.Message):
+    if m.from_user.id not in admin_cache: return
+    try:
+        link = m.text.split(" ")[1]
+        await db.settings.update_one({"id": "link_support"}, {"$set": {"url": link}}, upsert=True)
+        await m.answer("✅ সাপোর্ট লিংক আপডেট করা হয়েছে।")
     except Exception: pass
 
 @dp.message(Command("set18"))
@@ -665,7 +673,7 @@ async def send_reply(m: types.Message, state: FSMContext):
     except Exception: await m.answer("⚠️ রিপ্লাই পাঠানো যায়নি!")
 
 # ==========================================
-# 7. Web Admin Panel HTML & API
+# 7. Web Admin Panel HTML & API (With Search & Pagination)
 # ==========================================
 @app.get("/admin", response_class=HTMLResponse)
 async def web_admin_panel(auth: bool = Depends(verify_admin)):
@@ -677,12 +685,18 @@ async def web_admin_panel(auth: bool = Depends(verify_admin)):
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Admin Panel</title>
         <script src="https://cdn.tailwindcss.com"></script>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     </head>
     <body class="bg-gray-900 text-white p-5 font-sans">
-        <div class="max-w-4xl mx-auto">
-            <h1 class="text-3xl font-bold text-red-500 mb-6 border-b border-gray-700 pb-3">Admin Dashboard</h1>
+        <div class="max-w-5xl mx-auto">
+            <h1 class="text-3xl font-bold text-red-500 mb-6 border-b border-gray-700 pb-3"><i class="fa-solid fa-screwdriver-wrench"></i> Admin Dashboard</h1>
             <div class="bg-gray-800 rounded-xl shadow-lg border border-gray-700 p-6">
-                <h2 class="text-xl font-bold mb-4 text-gray-200">Manage Movies</h2>
+                
+                <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+                    <h2 class="text-xl font-bold text-gray-200">Manage Movies</h2>
+                    <input type="text" id="adminSearch" placeholder="🔍 Search Movies..." class="bg-gray-700 text-white px-4 py-2 rounded-lg border border-gray-600 focus:outline-none w-full md:w-1/3">
+                </div>
+
                 <div class="overflow-x-auto">
                     <table class="w-full text-left text-sm whitespace-nowrap">
                         <thead class="bg-gray-700 text-gray-300">
@@ -691,37 +705,71 @@ async def web_admin_panel(auth: bool = Depends(verify_admin)):
                         <tbody id="movieTableBody"><tr><td colspan="4" class="text-center p-8 text-gray-400">Loading...</td></tr></tbody>
                     </table>
                 </div>
+                
+                <!-- Pagination Controls -->
+                <div class="flex justify-center items-center gap-3 mt-6" id="adminPagination"></div>
+
             </div>
         </div>
         <script>
-            async function loadAdminData() {
-                const res = await fetch('/api/admin/data'); const data = await res.json();
+            let currentPage = 1;
+            let searchQuery = "";
+            let searchTimeout = null;
+
+            document.getElementById('adminSearch').addEventListener('input', function(e) {
+                clearTimeout(searchTimeout);
+                searchQuery = e.target.value.trim();
+                searchTimeout = setTimeout(() => loadAdminData(1), 500);
+            });
+
+            async function loadAdminData(page = 1) {
+                currentPage = page;
+                document.getElementById('movieTableBody').innerHTML = '<tr><td colspan="4" class="text-center p-8 text-gray-400">Loading...</td></tr>';
+                const res = await fetch(`/api/admin/data?page=${currentPage}&q=${encodeURIComponent(searchQuery)}`); 
+                const data = await res.json();
+                
                 let html = '';
-                data.movies.forEach(m => {
-                    html += `<tr class="border-b border-gray-700">
-                        <td class="p-4 font-medium">${m._id}</td>
-                        <td class="p-4 text-gray-400">${m.clicks} Views</td>
-                        <td class="p-4 text-green-400">${m.file_count}</td>
-                        <td class="p-4 flex gap-2">
-                            <button onclick="addViews('${encodeURIComponent(m._id)}')" class="text-yellow-400 bg-yellow-900 px-3 py-1 rounded">Boost</button>
-                            <button onclick="deleteMovie('${encodeURIComponent(m._id)}')" class="text-red-400 bg-red-900 px-3 py-1 rounded">Delete</button>
-                        </td>
-                    </tr>`;
-                });
+                if(data.movies.length === 0) {
+                    html = '<tr><td colspan="4" class="text-center p-8 text-gray-400">No movies found.</td></tr>';
+                } else {
+                    data.movies.forEach(m => {
+                        html += `<tr class="border-b border-gray-700 hover:bg-gray-750">
+                            <td class="p-4 font-medium">${m._id}</td>
+                            <td class="p-4 text-gray-400">${m.clicks} Views</td>
+                            <td class="p-4 text-green-400">${m.file_count}</td>
+                            <td class="p-4 flex gap-2">
+                                <button onclick="addViews('${encodeURIComponent(m._id)}')" class="text-yellow-400 bg-yellow-900 px-3 py-1 rounded transition hover:bg-yellow-800">Boost</button>
+                                <button onclick="deleteMovie('${encodeURIComponent(m._id)}')" class="text-red-400 bg-red-900 px-3 py-1 rounded transition hover:bg-red-800">Delete</button>
+                            </td>
+                        </tr>`;
+                    });
+                }
                 document.getElementById('movieTableBody').innerHTML = html;
+
+                // Pagination Render
+                let pageHtml = "";
+                if(data.total_pages > 1) {
+                    pageHtml += `<button ${currentPage === 1 ? 'disabled class="px-4 py-2 bg-gray-700 text-gray-500 rounded"' : 'class="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded text-white" onclick="loadAdminData(' + (currentPage - 1) + ')"'}>Prev</button>`;
+                    pageHtml += `<span class="px-4 py-2 font-bold">Page ${currentPage} of ${data.total_pages}</span>`;
+                    pageHtml += `<button ${currentPage === data.total_pages ? 'disabled class="px-4 py-2 bg-gray-700 text-gray-500 rounded"' : 'class="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded text-white" onclick="loadAdminData(' + (currentPage + 1) + ')"'}>Next</button>`;
+                }
+                document.getElementById('adminPagination').innerHTML = pageHtml;
             }
+
             async function deleteMovie(title) {
-                if(!confirm('Delete ALL files for this movie?')) return;
-                await fetch('/api/admin/movie/' + title, {method: 'DELETE'}); loadAdminData();
+                if(!confirm('Are you sure you want to delete ALL files for this movie?')) return;
+                await fetch('/api/admin/movie/' + title, {method: 'DELETE'}); 
+                loadAdminData(currentPage);
             }
+
             async function addViews(title) {
-                let amount = prompt("কত ভিউ বাড়াতে চান?", "1000");
+                let amount = prompt("How many views to add?", "1000");
                 if(amount && !isNaN(amount)) {
                     await fetch('/api/admin/movie/' + title, { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({add_clicks: parseInt(amount)}) });
-                    loadAdminData();
+                    loadAdminData(currentPage);
                 }
             }
-            loadAdminData();
+            loadAdminData(1);
         </script>
     </body>
     </html>
@@ -729,10 +777,24 @@ async def web_admin_panel(auth: bool = Depends(verify_admin)):
     return HTMLResponse(content=html_content)
 
 @app.get("/api/admin/data")
-async def get_admin_data(auth: bool = Depends(verify_admin)):
-    pipeline = [{"$group": {"_id": "$title", "clicks": {"$sum": "$clicks"}, "file_count": {"$sum": 1}, "created_at": {"$max": "$created_at"}}}, {"$sort": {"created_at": -1}}, {"$limit": 50}]
-    movies = await db.movies.aggregate(pipeline).to_list(50)
-    return {"movies": movies}
+async def get_admin_data(page: int = 1, q: str = "", auth: bool = Depends(verify_admin)):
+    limit = 20
+    skip = (page - 1) * limit
+    match_stage = {"title": {"$regex": q, "$options": "i"}} if q else {}
+    
+    pipeline = [
+        {"$match": match_stage},
+        {"$group": {"_id": "$title", "clicks": {"$sum": "$clicks"}, "file_count": {"$sum": 1}, "created_at": {"$max": "$created_at"}}}, 
+        {"$sort": {"created_at": -1}}, 
+        {"$skip": skip}, 
+        {"$limit": limit}
+    ]
+    movies = await db.movies.aggregate(pipeline).to_list(limit)
+    
+    total_groups = await db.movies.aggregate([{"$match": match_stage}, {"$group": {"_id": "$title"}}, {"$count": "total"}]).to_list(1)
+    total_pages = (total_groups[0]["total"] + limit - 1) // limit if total_groups else 0
+    
+    return {"movies": movies, "total_pages": total_pages}
 
 @app.delete("/api/admin/movie/{title}")
 async def delete_movie_api(title: str, auth: bool = Depends(verify_admin)):
@@ -751,12 +813,14 @@ async def edit_movie_api(title: str, data: dict = Body(...), auth: bool = Depend
 @app.get("/", response_class=HTMLResponse)
 async def web_ui():
     tg_cfg = await db.settings.find_one({"id": "link_tg"})
+    support_cfg = await db.settings.find_one({"id": "link_support"})
     b18_cfg = await db.settings.find_one({"id": "link_18"})
     bkash_cfg = await db.settings.find_one({"id": "bkash_no"})
     nagad_cfg = await db.settings.find_one({"id": "nagad_no"})
     dl_cfg = await db.settings.find_one({"id": "direct_links"})
     
     tg_url = tg_cfg['url'] if tg_cfg else "https://t.me/MovieeBD"
+    support_link = support_cfg['url'] if support_cfg else "https://t.me/YourSupportUsername"
     link_18 = b18_cfg['url'] if b18_cfg else "https://t.me/MovieeBD"
     bkash_no = bkash_cfg['number'] if bkash_cfg else "Not Set"
     nagad_no = nagad_cfg['number'] if nagad_cfg else "Not Set"
@@ -900,9 +964,9 @@ async def web_ui():
             
             <a onclick="tg.showAlert('ডাউনলোডের নিয়ম:\n১. ডাউনলোড বাটনে ক্লিক করুন।\n২. ১৫ সেকেন্ড অপেক্ষা করুন।\n৩. ভিডিওটি অটোমেটিক বটের ইনবক্সে চলে যাবে!')"><i class="fa-solid fa-circle-question text-red-400"></i> ডাউনলোডের নিয়ম</a>
             <a onclick="window.open('{{TG_LINK}}')"><i class="fa-solid fa-bullhorn text-green-400"></i> আমাদের চ্যানেল</a>
-            <a onclick="window.open('https://t.me/+XNsVK-PCgVA4ZDA9')"><i class="fa-brands fa-telegram text-blue-400"></i> সাপোর্ট / কন্টাক্ট</a>
+            <a onclick="window.open('{{SUPPORT_LINK}}')"><i class="fa-brands fa-telegram text-blue-400"></i> সাপোর্ট / কন্টাক্ট</a>
             
-            <a href="/admin" id="adminMenuBtn" style="display: none; color: #ef4444;"><i class="fa-solid fa-screwdriver-wrench"></i> অ্যাডমিন প্যানেল</a>
+            <a onclick="window.open(window.location.origin + '/admin', '_blank')" id="adminMenuBtn" style="display: none; color: #ef4444;"><i class="fa-solid fa-screwdriver-wrench"></i> অ্যাডমিন প্যানেল</a>
         </div>
 
         <div class="search-box">
@@ -919,7 +983,7 @@ async def web_ui():
         <div class="grid" id="movieGrid"></div>
         <div class="pagination" id="paginationBox"></div>
         
-        <!-- Developer Credit Section -->
+        <!-- Developer Credit Section (Fixed from Bot Admin) -->
         <div class="developer-credit">
             <div class="dev-title"><i class="fa-solid fa-laptop-code"></i> Developed & Deployed By</div>
             <div class="dev-name">Bot Developer</div>
@@ -1246,7 +1310,7 @@ async def web_ui():
     </body>
     </html>
     """
-    html_code = html_code.replace("{{DIRECT_LINKS}}", dl_json).replace("{{TG_LINK}}", tg_url).replace("{{LINK_18}}", link_18).replace("{{BOT_USER}}", BOT_USERNAME).replace("{{BKASH_NO}}", bkash_no).replace("{{NAGAD_NO}}", nagad_no)
+    html_code = html_code.replace("{{DIRECT_LINKS}}", dl_json).replace("{{TG_LINK}}", tg_url).replace("{{SUPPORT_LINK}}", support_link).replace("{{LINK_18}}", link_18).replace("{{BOT_USER}}", BOT_USERNAME).replace("{{BKASH_NO}}", bkash_no).replace("{{NAGAD_NO}}", nagad_no)
     return html_code
 
 # ==========================================
