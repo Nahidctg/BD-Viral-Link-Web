@@ -922,9 +922,9 @@ async def web_ui():
         <!-- Developer Credit Section -->
         <div class="developer-credit">
             <div class="dev-title"><i class="fa-solid fa-laptop-code"></i> Developed & Deployed By</div>
-            <div class="dev-name">YOUR BRAND NAME</div>
+            <div class="dev-name">Bot Developer</div>
             <div class="dev-desc">আপনিও কি আপনার চ্যানেল বা গ্রুপের জন্য এমন হাই-কোয়ালিটি এবং প্রিমিয়াম মুভি বট বানাতে চান? আজই আমাদের সাথে যোগাযোগ করুন।</div>
-            <button class="dev-btn" onclick="window.open('https://t.me/YourTelegramUsername', '_blank')">
+            <button class="dev-btn" onclick="window.open('https://t.me/ProBotDeveloperBot', '_blank')">
                 <i class="fa-brands fa-telegram"></i> Contact Developer
             </button>
         </div>
