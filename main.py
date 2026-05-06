@@ -10,7 +10,7 @@ import urllib.parse
 import secrets
 import json
 import html
-from PIL import Image, ImageFilter
+from PIL import Image, ImageFilter, ImageOps
 
 # ==========================================
 # 🛑 FIX FOR EVENT LOOP ERROR
@@ -109,36 +109,56 @@ async def get_video_duration(file_path):
 async def generate_collage(video_path, output_path):
     duration = await get_video_duration(video_path)
     timestamps = [max(1, duration * 0.2), duration * 0.5, duration * 0.8]
-    images = []
+    raw_images = []
+    
     for i, t in enumerate(timestamps):
         img_name = f"temp_frame_{i}_{int(time.time())}.jpg"
         cmd = f'ffmpeg -y -ss {t} -i "{video_path}" -vframes 1 -q:v 2 "{img_name}"'
         process = await asyncio.create_subprocess_shell(cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
         await process.communicate()
+        
         if os.path.exists(img_name):
             try:
-                img = Image.open(img_name)
-                h_percent = (360 / float(img.size[1]))
-                w_size = int((float(img.size[0]) * float(h_percent)))
-                img = img.resize((w_size, 360), Image.Resampling.LANCZOS)
-                images.append(img)
+                img = Image.open(img_name).convert('RGB')
+                raw_images.append(img)
             except Exception: pass
             finally:
                 if os.path.exists(img_name): os.remove(img_name)
+                
+    if not raw_images: return False
+    while len(raw_images) < 3: raw_images.append(raw_images[-1].copy())
     
-    if not images: return False
-    while len(images) < 3: images.append(images[-1].copy())
-        
-    img_w, img_h = images[0].size
-    padding = 8
-    poster_w = (img_w * 3) + (padding * 4)
-    poster_h = img_h + (padding * 2)
-    collage = Image.new('RGB', (poster_w, poster_h), color=(15, 23, 42))
-    positions = [(padding, padding), (img_w + padding * 2, padding), (img_w * 2 + padding * 3, padding)]
+    # Check Video Orientation (Landscape or Portrait)
+    img_w, img_h = raw_images[0].size
+    is_landscape = img_w > img_h  # YouTube Style
     
-    for idx, img in enumerate(images[:3]):
-        if img.size != (img_w, img_h): img = img.resize((img_w, img_h), Image.Resampling.LANCZOS)
-        collage.paste(img, positions[idx])
+    # Canvas Size fixed to 16:9 (1280x720) for App Compatibility
+    collage = Image.new('RGB', (1280, 720), color=(15, 23, 42))
+    
+    if is_landscape:
+        # Layout for YouTube (16:9) style videos
+        # Top 1 Main Image, Bottom 2 Small Images
+        try:
+            img0 = ImageOps.fit(raw_images[0], (1260, 400), Image.Resampling.LANCZOS)
+            img1 = ImageOps.fit(raw_images[1], (625, 290), Image.Resampling.LANCZOS)
+            img2 = ImageOps.fit(raw_images[2], (625, 290), Image.Resampling.LANCZOS)
+            
+            collage.paste(img0, (10, 10))
+            collage.paste(img1, (10, 420))
+            collage.paste(img2, (645, 420))
+        except: pass
+    else:
+        # Layout for TikTok (9:16) style videos
+        # 3 Vertical Strips side by side
+        try:
+            img0 = ImageOps.fit(raw_images[0], (413, 700), Image.Resampling.LANCZOS)
+            img1 = ImageOps.fit(raw_images[1], (413, 700), Image.Resampling.LANCZOS)
+            img2 = ImageOps.fit(raw_images[2], (413, 700), Image.Resampling.LANCZOS)
+            
+            collage.paste(img0, (10, 10))
+            collage.paste(img1, (433, 10))
+            collage.paste(img2, (856, 10))
+        except: pass
         
     collage.save(output_path, quality=90)
     return True
@@ -447,7 +467,7 @@ async def ban_user_cmd(m: types.Message):
     if m.from_user.id not in admin_cache: return
     try:
         target_uid = int(m.text.split()[1])
-        if target_uid in admin_cache: return await m.answer("⚠️ অ্যাডমিনকে ব্যান করা যাবে না!")
+        if target_uid in admin_cache: return await m.answer("⚠️ অ্যাডমিনকে ব্যান করা যাবেবিধা নেই!")
         await db.banned.update_one({"user_id": target_uid}, {"$set": {"user_id": target_uid}}, upsert=True)
         banned_cache.add(target_uid)
         await m.answer(f"🚫 ইউজার <code>{target_uid}</code> কে ব্যান করা হয়েছে!", parse_mode="HTML")
