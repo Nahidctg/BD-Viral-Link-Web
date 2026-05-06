@@ -1274,35 +1274,50 @@ async def web_ui():
                 }
             }
 
-            let linkOpenedAt = 0; let isWaitingForReturn = false; let dlTimerInterval = null;
+            let linkOpenedAt = 0; let dlTimerInterval = null;
             function executeDirectLink() {
                 if (!DIRECT_LINKS || DIRECT_LINKS.length === 0) { document.getElementById('directLinkModal').style.display = 'none'; if (onAdCompleteCallback) onAdCompleteCallback(); return; }
+                
                 tg.openLink(DIRECT_LINKS[Math.floor(Math.random() * DIRECT_LINKS.length)]);
-                linkOpenedAt = Date.now(); isWaitingForReturn = true;
+                linkOpenedAt = Date.now();
+                
                 const btn = document.getElementById('dlClickBtn');
-                btn.disabled = true; let timeLeft = 15; btn.style.background = "#475569";
+                btn.disabled = true; 
+                btn.style.background = "#475569";
+                
                 dlTimerInterval = setInterval(() => {
-                    timeLeft--; btn.innerText = `⏳ অপেক্ষা করুন... (${timeLeft}s)`;
-                    if (timeLeft <= 0) { clearInterval(dlTimerInterval); btn.innerText = `✅ সম্পন্ন হয়েছে!`; }
+                    let elapsedSeconds = Math.floor((Date.now() - linkOpenedAt) / 1000);
+                    let timeLeft = 15 - elapsedSeconds;
+                    
+                    if (timeLeft <= 0) { 
+                        clearInterval(dlTimerInterval); 
+                        btn.innerText = `✅ সম্পন্ন হয়েছে! ভিডিও নিন`; 
+                        btn.disabled = false;
+                        btn.style.background = "linear-gradient(45deg, #10b981, #059669)";
+                        
+                        btn.onclick = function() {
+                            document.getElementById('directLinkModal').style.display = 'none'; 
+                            if (onAdCompleteCallback) onAdCompleteCallback();
+                            btn.onclick = executeDirectLink;
+                        };
+                    } else {
+                        btn.innerText = `⏳ লিংকে অপেক্ষা করুন... (${timeLeft}s)`;
+                    }
                 }, 1000);
             }
-
-            document.addEventListener("visibilitychange", function() {
-                if (document.visibilityState === 'visible' && isWaitingForReturn) {
-                    isWaitingForReturn = false; clearInterval(dlTimerInterval);
-                    if (Date.now() - linkOpenedAt < 14000) {
-                        tg.showAlert("⚠️ আপনাকে অবশ্যই পুরো ১৫ সেকেন্ড অপেক্ষা করতে হবে।");
-                        const btn = document.getElementById('dlClickBtn'); btn.disabled = false; btn.innerText = "🔗 Click Here (Open Link)"; btn.style.background = "linear-gradient(45deg, #ef4444, #f97316)";
-                    } else { document.getElementById('directLinkModal').style.display = 'none'; if (onAdCompleteCallback) onAdCompleteCallback(); }
-                }
-            });
 
             async function sendFile(id) {
                 try {
                     const res = await fetch('/api/send', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({userId: uid, movieId: id, initData: INIT_DATA}) });
                     const data = await res.json();
-                    if(data.ok) { document.getElementById('successModal').style.display = 'flex'; }
-                } catch (e) {}
+                    if(data.ok) { 
+                        document.getElementById('successModal').style.display = 'flex'; 
+                    } else {
+                        tg.showAlert("❌ সমস্যা হয়েছে: " + (data.msg || "ভিডিও পাঠানো সম্ভব হয়নি!"));
+                    }
+                } catch (e) {
+                    tg.showAlert("❌ নেটওয়ার্ক সমস্যা! আপনার ইন্টারনেট কানেকশন চেক করুন।");
+                }
             }
 
             fetchUserInfo(); loadTrending(); loadMovies(1); 
@@ -1412,7 +1427,9 @@ class SendRequestModel(BaseModel):
 
 @app.post("/api/send")
 async def send_file(d: SendRequestModel):
-    if d.userId == 0 or not validate_tg_data(d.initData): return {"ok": False}
+    if d.userId == 0 or not validate_tg_data(d.initData): 
+        return {"ok": False, "msg": "Authorization Failed! Please reload the app."}
+    
     try:
         m = await db.movies.find_one({"_id": ObjectId(d.movieId)})
         if m:
@@ -1426,18 +1443,30 @@ async def send_file(d: SendRequestModel):
             is_protected = protect_cfg['status'] if protect_cfg else True
 
             caption = (f"🎥 <b>{m['title']} [{m.get('quality', 'HD')}]</b>\n\n📥 Join: @TGLinkBase")
-            if m.get("file_type") == "video":
-                sent_msg = await bot.send_video(d.userId, m['file_id'], caption=caption, parse_mode="HTML", protect_content=is_protected)
-            else:
-                sent_msg = await bot.send_document(d.userId, m['file_id'], caption=caption, parse_mode="HTML", protect_content=is_protected)
             
-            await db.movies.update_one({"_id": ObjectId(d.movieId)}, {"$inc": {"clicks": 1}})
-            await db.user_unlocks.update_one({"user_id": d.userId, "movie_id": d.movieId}, {"$set": {"unlocked_at": now}}, upsert=True)
+            try:
+                if m.get("file_type") == "video":
+                    sent_msg = await bot.send_video(d.userId, m['file_id'], caption=caption, parse_mode="HTML", protect_content=is_protected)
+                else:
+                    sent_msg = await bot.send_document(d.userId, m['file_id'], caption=caption, parse_mode="HTML", protect_content=is_protected)
+                
+                await db.movies.update_one({"_id": ObjectId(d.movieId)}, {"$inc": {"clicks": 1}})
+                await db.user_unlocks.update_one({"user_id": d.userId, "movie_id": d.movieId}, {"$set": {"unlocked_at": now}}, upsert=True)
+                
+                if sent_msg and not is_vip:
+                    await db.auto_delete.insert_one({"chat_id": d.userId, "message_id": sent_msg.message_id, "delete_at": now + datetime.timedelta(minutes=del_minutes)})
+                
+                return {"ok": True}
+                
+            except BaseException as tg_error:
+                print(f"Telegram Send Error for UID {d.userId}: {str(tg_error)}")
+                return {"ok": False, "msg": "দয়া করে আগে বটের ইনবক্সে গিয়ে /start এ ক্লিক করুন! বট ব্লক করা থাকলে মেসেজ যাবে না।"}
+        else:
+            return {"ok": False, "msg": "ফাইলটি ডাটাবেসে পাওয়া যায়নি!"}
             
-            if sent_msg and not is_vip:
-                await db.auto_delete.insert_one({"chat_id": d.userId, "message_id": sent_msg.message_id, "delete_at": now + datetime.timedelta(minutes=del_minutes)})
-    except Exception: pass
-    return {"ok": True}
+    except Exception as e:
+        print(f"System Error: {str(e)}")
+        return {"ok": False, "msg": "সার্ভার সমস্যা! একটু পর আবার চেষ্টা করুন।"}
 
 class ReqModel(BaseModel):
     uid: int
