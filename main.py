@@ -1399,7 +1399,7 @@ async def trending_movies(uid: int = 0):
 
 @app.get("/api/list")
 async def list_movies(page: int = 1, q: str = "", uid: int = 0):
-    limit = 10
+    limit = 30
     skip = (page - 1) * limit
     unlocked_ids = []
     
