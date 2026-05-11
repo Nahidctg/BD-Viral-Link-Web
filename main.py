@@ -81,7 +81,7 @@ class AdminStates(StatesGroup):
     waiting_for_quality = State() 
 
 # ==========================================
-# 2. Image Processing (Wide Thumbnails)
+# 2. Image Processing & New Features
 # ==========================================
 def make_wide_thumbnail(input_path, output_path):
     try:
@@ -136,8 +136,6 @@ async def generate_collage(video_path, output_path):
     collage = Image.new('RGB', (1280, 720), color=(15, 23, 42))
     
     if is_landscape:
-        # Layout for YouTube (16:9) style videos
-        # Top 1 Main Image, Bottom 2 Small Images
         try:
             img0 = ImageOps.fit(raw_images[0], (1260, 400), Image.Resampling.LANCZOS)
             img1 = ImageOps.fit(raw_images[1], (625, 290), Image.Resampling.LANCZOS)
@@ -148,8 +146,6 @@ async def generate_collage(video_path, output_path):
             collage.paste(img2, (645, 420))
         except: pass
     else:
-        # Layout for TikTok (9:16) style videos
-        # 3 Vertical Strips side by side
         try:
             img0 = ImageOps.fit(raw_images[0], (413, 700), Image.Resampling.LANCZOS)
             img1 = ImageOps.fit(raw_images[1], (413, 700), Image.Resampling.LANCZOS)
@@ -163,6 +159,30 @@ async def generate_collage(video_path, output_path):
     collage.save(output_path, quality=90)
     return True
 
+# ==========================================
+# 🌟 NEW: Watermark & Auto-Trailer Functions
+# ==========================================
+async def apply_watermark(input_path, output_path, watermark_text):
+    try:
+        # Draw text in the bottom right corner with semi-transparent background
+        cmd = f'ffmpeg -y -i "{input_path}" -vf "drawtext=text=\'{watermark_text}\':x=W-tw-10:y=H-th-10:fontsize=24:fontcolor=white@0.8:box=1:boxcolor=black@0.4" -codec:a copy "{output_path}"'
+        process = await asyncio.create_subprocess_shell(cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+        await process.communicate()
+        return os.path.exists(output_path)
+    except Exception: return False
+
+async def generate_trailer(input_path, output_path):
+    try:
+        duration = await get_video_duration(input_path)
+        start_time = max(0, (duration / 2) - 2.5) # Middle of the video
+        # Create a 5-second mute mp4 (acts as GIF in Telegram)
+        cmd = f'ffmpeg -y -ss {start_time} -t 5 -i "{input_path}" -an -vf "scale=480:-2" -c:v libx264 -preset veryfast -crf 28 "{output_path}"'
+        process = await asyncio.create_subprocess_shell(cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+        await process.communicate()
+        return os.path.exists(output_path)
+    except Exception: return False
+# ==========================================
+
 async def video_queue_worker():
     global is_processing
     while True:
@@ -171,6 +191,8 @@ async def video_queue_worker():
         downloaded_file = None
         collage_path = None
         status_msg = None
+        wm_output = None
+        trailer_path = None
         try:
             admin_id = chat_id
             status_msg = await bot.send_message(admin_id, "⏳ <b>Processing Video...</b> (Downloading)")
@@ -183,7 +205,7 @@ async def video_queue_worker():
             collage_path = os.path.abspath(f"collage_{serial_no}_{int(time.time())}.jpg")
             
             # ==========================================
-            # 🛑 UPDATED: RETRY LOGIC FOR DOWNLOADING
+            # 🛑 RETRY LOGIC FOR DOWNLOADING
             # ==========================================
             max_retries = 3
             for attempt in range(max_retries):
@@ -196,7 +218,7 @@ async def video_queue_worker():
                     downloaded_file = await pyro_app.download_media(pyro_msg, file_name=video_name)
                     
                     if downloaded_file:
-                        break  # ফাইল ডাউনলোড সফল হলে লুপ ভেঙে বেরিয়ে আসবে
+                        break
                 except Exception as e:
                     print(f"Download attempt {attempt} failed: {e}")
                     if attempt == max_retries - 1:
@@ -207,6 +229,46 @@ async def video_queue_worker():
                 await bot.edit_message_text("❌ ফাইল ডাউনলোড করতে সমস্যা হয়েছে।", chat_id=admin_id, message_id=status_msg.message_id)
                 continue
                 
+            # ==========================================
+            # 🌟 NEW FIX: WATERMARK & LEECHER LOGIC
+            # ==========================================
+            wm_cfg = await db.settings.find_one({"id": "watermark_status"})
+            is_wm_on = wm_cfg["status"] if wm_cfg else False
+            wm_text_cfg = await db.settings.find_one({"id": "watermark_text"})
+            wm_text = wm_text_cfg["text"] if wm_text_cfg else f"@{BOT_USERNAME}"
+
+            if is_wm_on:
+                await bot.edit_message_text("💧 <b>Applying Watermark...</b>", chat_id=admin_id, message_id=status_msg.message_id, parse_mode="HTML")
+                wm_output = f"wm_{video_name}"
+                wm_success = await apply_watermark(downloaded_file, wm_output, wm_text)
+                
+                if wm_success and os.path.exists(wm_output):
+                    os.remove(downloaded_file)
+                    downloaded_file = wm_output
+                    
+                    # Leecher: Re-uploading to get new file_id
+                    await bot.edit_message_text("☁️ <b>Uploading Watermarked Video (Leeching)...</b>", chat_id=admin_id, message_id=status_msg.message_id, parse_mode="HTML")
+                    try:
+                        up_msg = await pyro_app.send_document(admin_id, document=downloaded_file)
+                        if up_msg and up_msg.document:
+                            aiogram_file_id = up_msg.document.file_id
+                        elif up_msg and up_msg.video:
+                            aiogram_file_id = up_msg.video.file_id
+                    except Exception as e:
+                        print(f"Re-upload failed: {e}")
+
+            # ==========================================
+            # 🌟 NEW FIX: AUTO TRAILER / GIF LOGIC
+            # ==========================================
+            tr_cfg = await db.settings.find_one({"id": "autotrailer_status"})
+            is_tr_on = tr_cfg["status"] if tr_cfg else False
+            trailer_path = os.path.abspath(f"trailer_{serial_no}_{int(time.time())}.mp4")
+            trailer_success = False
+            
+            if is_tr_on:
+                await bot.edit_message_text("🎬 <b>Generating Auto Trailer...</b>", chat_id=admin_id, message_id=status_msg.message_id, parse_mode="HTML")
+                trailer_success = await generate_trailer(downloaded_file, trailer_path)
+
             await bot.edit_message_text("📸 <b>Generating Screenshots...</b>", chat_id=admin_id, message_id=status_msg.message_id, parse_mode="HTML")
             success = await generate_collage(downloaded_file, collage_path)
             
@@ -230,7 +292,13 @@ async def video_queue_worker():
                     kb = [[types.InlineKeyboardButton(text="📥 ভিডিওটি দেখতে এখানে ক্লিক করুন", url=f"https://t.me/{bot_info.username}?start=new")]]
                     markup = types.InlineKeyboardMarkup(inline_keyboard=kb)
                     caption = (f"🔥 <b>নতুন এক্সক্লুসিভ ভাইরাল ভিডিও!</b>\n\n📌 <b>টাইটেল:</b> {auto_title}\n🏷 <b>কোয়ালিটি:</b> HD (Original)\n\n👇 <i>বট থেকে ভিডিওটি পেতে নিচের বাটনে ক্লিক করুন।</i>")
-                    await bot.send_photo(chat_id=CHANNEL_ID, photo=photo_id, caption=caption, parse_mode="HTML", reply_markup=markup)
+                    
+                    if trailer_success and os.path.exists(trailer_path):
+                        # Send the animated trailer GIF to the channel
+                        await bot.send_animation(chat_id=CHANNEL_ID, animation=FSInputFile(trailer_path), caption=caption, parse_mode="HTML", reply_markup=markup)
+                    else:
+                        # Fallback to Photo if trailer failed or is OFF
+                        await bot.send_photo(chat_id=CHANNEL_ID, photo=photo_id, caption=caption, parse_mode="HTML", reply_markup=markup)
                 except Exception: pass
                 
         except Exception as e:
@@ -243,6 +311,8 @@ async def video_queue_worker():
         finally:
             if downloaded_file and os.path.exists(downloaded_file): os.remove(downloaded_file)
             if collage_path and os.path.exists(collage_path): os.remove(collage_path)
+            if wm_output and os.path.exists(wm_output): os.remove(wm_output)
+            if trailer_path and os.path.exists(trailer_path): os.remove(trailer_path)
             video_queue.task_done()
             is_processing = False
 
@@ -340,6 +410,9 @@ async def start_cmd(message: types.Message, state: FSMContext):
             "👋 <b>হ্যালো অ্যাডমিন!</b>\n\n"
             "⚙️ <b>কমান্ড:</b>\n"
             "🔸 অটো আপলোড: <code>/autoupload on/off</code>\n"
+            "🔸 অটো লিচার+ওয়াটারমার্ক: <code>/watermark on/off</code>\n"
+            "🔸 ওয়াটারমার্ক টেক্সট: <code>/setwatermark [টেক্সট]</code>\n"
+            "🔸 অটো ট্রেলার/GIF: <code>/autotrailer on/off</code>\n"
             "🔸 অ্যাডমিন প্যানেল: <code>/addadmin ID</code> | <code>/deladmin ID</code> | <code>/adminlist</code>\n"
             "🔸 ডাইরেক্ট লিংক: <code>/addlink লিংক</code> | <code>/dellink লিংক</code> | <code>/seelinks</code>\n"
             "🔸 টেলিগ্রাম: <code>/settg লিংক</code> | 18+: <code>/set18 লিংক</code>\n"
@@ -366,6 +439,37 @@ async def toggle_auto_upload(m: types.Message):
         await db.settings.update_one({"id": "auto_upload_mode"}, {"$set": {"status": state == "on"}}, upsert=True)
         await m.answer(f"✅ Auto Upload {'চালু' if state=='on' else 'বন্ধ'} করা হয়েছে।")
     except: pass
+
+# ==========================================
+# 🌟 NEW COMMANDS FOR LEECHER & TRAILER
+# ==========================================
+@dp.message(Command("watermark"))
+async def toggle_watermark(m: types.Message):
+    if m.from_user.id not in admin_cache: return
+    try:
+        state = m.text.split(" ")[1].lower()
+        await db.settings.update_one({"id": "watermark_status"}, {"$set": {"status": state == "on"}}, upsert=True)
+        await m.answer(f"✅ ওয়াটারমার্ক ও লিচার {'চালু' if state=='on' else 'বন্ধ'} করা হয়েছে।")
+    except: pass
+
+@dp.message(Command("setwatermark"))
+async def set_watermark_text(m: types.Message):
+    if m.from_user.id not in admin_cache: return
+    try:
+        text = m.text.split(" ", 1)[1].strip()
+        await db.settings.update_one({"id": "watermark_text"}, {"$set": {"text": text}}, upsert=True)
+        await m.answer(f"✅ ওয়াটারমার্ক টেক্সট সেট করা হয়েছে:\n<b>{text}</b>", parse_mode="HTML")
+    except: pass
+
+@dp.message(Command("autotrailer"))
+async def toggle_autotrailer(m: types.Message):
+    if m.from_user.id not in admin_cache: return
+    try:
+        state = m.text.split(" ")[1].lower()
+        await db.settings.update_one({"id": "autotrailer_status"}, {"$set": {"status": state == "on"}}, upsert=True)
+        await m.answer(f"✅ অটো ট্রেলার/GIF {'চালু' if state=='on' else 'বন্ধ'} করা হয়েছে।")
+    except: pass
+# ==========================================
 
 @dp.message(Command("addlink"))
 async def add_direct_link(m: types.Message):
@@ -719,7 +823,7 @@ async def send_reply(m: types.Message, state: FSMContext):
     except Exception: await m.answer("⚠️ রিপ্লাই পাঠানো যায়নি!")
 
 # ==========================================
-# 7. Web Admin Panel HTML & API (With Search & Pagination)
+# 7. Web Admin Panel HTML & API
 # ==========================================
 @app.get("/admin", response_class=HTMLResponse)
 async def web_admin_panel(auth: bool = Depends(verify_admin)):
