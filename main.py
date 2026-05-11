@@ -170,10 +170,10 @@ async def video_queue_worker():
         is_processing = True
         downloaded_file = None
         collage_path = None
+        status_msg = None
         try:
             admin_id = chat_id
             status_msg = await bot.send_message(admin_id, "⏳ <b>Processing Video...</b> (Downloading)")
-            pyro_msg = await pyro_app.get_messages(chat_id, message_id)
             
             total_vids = await db.movies.count_documents({})
             serial_no = total_vids + 1
@@ -182,7 +182,27 @@ async def video_queue_worker():
             video_name = f"temp_video_{serial_no}_{int(time.time())}.mp4"
             collage_path = os.path.abspath(f"collage_{serial_no}_{int(time.time())}.jpg")
             
-            downloaded_file = await pyro_app.download_media(pyro_msg, file_name=video_name)
+            # ==========================================
+            # 🛑 UPDATED: RETRY LOGIC FOR DOWNLOADING
+            # ==========================================
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    if attempt > 0:
+                        await bot.edit_message_text(f"⚠️ Network Drop! Retrying... ({attempt}/{max_retries})", chat_id=admin_id, message_id=status_msg.message_id)
+                        await asyncio.sleep(3)
+                        
+                    pyro_msg = await pyro_app.get_messages(chat_id, message_id)
+                    downloaded_file = await pyro_app.download_media(pyro_msg, file_name=video_name)
+                    
+                    if downloaded_file:
+                        break  # ফাইল ডাউনলোড সফল হলে লুপ ভেঙে বেরিয়ে আসবে
+                except Exception as e:
+                    print(f"Download attempt {attempt} failed: {e}")
+                    if attempt == max_retries - 1:
+                        raise Exception("টেলিগ্রাম সার্ভার বারবার ডিসকানেক্ট হয়ে যাচ্ছে। কিছুক্ষণ পর আবার চেষ্টা করুন।")
+            # ==========================================
+
             if not downloaded_file:
                 await bot.edit_message_text("❌ ফাইল ডাউনলোড করতে সমস্যা হয়েছে।", chat_id=admin_id, message_id=status_msg.message_id)
                 continue
@@ -212,8 +232,14 @@ async def video_queue_worker():
                     caption = (f"🔥 <b>নতুন এক্সক্লুসিভ ভাইরাল ভিডিও!</b>\n\n📌 <b>টাইটেল:</b> {auto_title}\n🏷 <b>কোয়ালিটি:</b> HD (Original)\n\n👇 <i>বট থেকে ভিডিওটি পেতে নিচের বাটনে ক্লিক করুন।</i>")
                     await bot.send_photo(chat_id=CHANNEL_ID, photo=photo_id, caption=caption, parse_mode="HTML", reply_markup=markup)
                 except Exception: pass
+                
         except Exception as e:
-            await bot.send_message(chat_id, f"⚠️ Error: {str(e)}")
+            try:
+                if status_msg:
+                    await bot.edit_message_text(f"⚠️ Error: {str(e)}", chat_id=admin_id, message_id=status_msg.message_id)
+                else:
+                    await bot.send_message(chat_id, f"⚠️ Error: {str(e)}")
+            except: pass
         finally:
             if downloaded_file and os.path.exists(downloaded_file): os.remove(downloaded_file)
             if collage_path and os.path.exists(collage_path): os.remove(collage_path)
