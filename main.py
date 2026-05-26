@@ -101,8 +101,8 @@ db = client['movie_database']
 admin_cache = set([OWNER_ID]) 
 banned_cache = set() 
 
-trending_cache = TTLCache(maxsize=10, ttl=300)
-list_cache = TTLCache(maxsize=100, ttl=300)
+trending_cache = TTLCache(maxsize=10, ttl=800)
+list_cache = TTLCache(maxsize=100, ttl=800)
 category_cache = TTLCache(maxsize=5, ttl=43200)
 auto_reply_cache = TTLCache(maxsize=1000, ttl=10) 
 
