@@ -7,3 +7,7 @@ aiohttp
 pyrogram
 tgcrypto
 Pillow
+cachetools
+google-generativeai
+pytz
+rapidfuzz
