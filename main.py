@@ -73,7 +73,7 @@ ADMIN_PASS = os.getenv("ADMIN_PASS", "admin123")
 BOT_USERNAME = "BDViralLinkProBot"
 
 TUTORIAL_LINK = "https://t.me/HowtoDowlnoad/41"
-REQUEST_LINK = "https://t.me/+dld6-uEkdvQ5Yjg1"
+REQUEST_LINK = "https://t.me/+NEMfLNawn2hkNjg9"
 
 _db_ch = os.getenv("DB_CHANNEL_ID", "")
 DB_CHANNEL_ID = int(_db_ch) if _db_ch.lstrip('-').isdigit() else None
