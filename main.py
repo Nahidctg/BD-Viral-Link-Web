@@ -35,8 +35,6 @@ from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
-from upcoming_router import upcoming_router
-
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.utils.keyboard import InlineKeyboardBuilder
@@ -51,7 +49,7 @@ from bson import ObjectId
 from pydantic import BaseModel
 from pyrogram import Client as PyroClient
 
-# 🛑 NEW: AI Assistant Import (আলাদা ফোল্ডার থেকে)
+# 🛑 NEW: AI Assistant Import
 from assistant.ai_reply import get_smart_reply
 
 # ==========================================
@@ -84,7 +82,6 @@ bot = Bot(token=TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 
 app = FastAPI()
-app.include_router(upcoming_router)
 
 security = HTTPBasic()
 
@@ -101,9 +98,8 @@ db = client['movie_database']
 admin_cache = set([OWNER_ID]) 
 banned_cache = set() 
 
-trending_cache = TTLCache(maxsize=10, ttl=800)
-list_cache = TTLCache(maxsize=100, ttl=800)
-category_cache = TTLCache(maxsize=5, ttl=43200)
+trending_cache = TTLCache(maxsize=10, ttl=300)
+list_cache = TTLCache(maxsize=100, ttl=300)
 auto_reply_cache = TTLCache(maxsize=1000, ttl=10) 
 
 keyword_replies_cache = {}
@@ -116,7 +112,6 @@ async def load_keyword_replies():
 def clear_app_cache():
     trending_cache.clear()
     list_cache.clear()
-    category_cache.clear()
 
 video_queue = None
 is_processing = False
@@ -135,7 +130,6 @@ class AdminStates(StatesGroup):
     waiting_for_photo = State()
     waiting_for_title = State()
     waiting_for_quality = State() 
-    waiting_for_category = State()
     waiting_for_series_search = State()
     waiting_for_episode_quality = State()
 
@@ -238,7 +232,21 @@ async def video_queue_worker():
             
             total_vids = await db.movies.count_documents({})
             serial_no = total_vids + 1
-            auto_title = f"New Viral Video {serial_no:04d}"
+            
+            # 🛑 রেনডম ও আকর্ষণীয় অটো-টাইটেল জেনারেটর
+            viral_titles = [
+                "New Viral Trending Clip",
+                "Leaked Private Video",
+                "Desi Viral Collection",
+                "Exclusive Private Clip",
+                "Hot Leaked Collection",
+                "New Secret Trending Video",
+                "Bhabhi Viral Video Clip",
+                "MMS Leaked Video Clip",
+                "Hot Garam Masala Video"
+            ]
+            random_prefix = random.choice(viral_titles)
+            auto_title = f"{random_prefix} #{serial_no:04d}"
             
             video_name = f"temp_video_{serial_no}_{int(time.time())}.mp4"
             collage_path = os.path.abspath(f"collage_{serial_no}_{int(time.time())}.jpg")
@@ -276,7 +284,6 @@ async def video_queue_worker():
                 "title": auto_title, "quality": "HD", "photo_id": photo_id, 
                 "file_id": aiogram_file_id, "file_type": file_type,
                 "db_file_id": db_file_id, "db_photo_id": db_photo_id,
-                "categories": ["Auto Upload"], 
                 "clicks": 0, "created_at": datetime.datetime.utcnow()
             })
             clear_app_cache() 
@@ -318,9 +325,9 @@ async def init_db():
     await db.payments.create_index("trx_id", unique=True)
     await db.ads.create_index("expires_at")
     
-    # 7 Days Trending Tracking indexes [5]
+    # 7 Days Trending Tracking indexes
     await db.movie_views.create_index([("title", 1), ("viewed_at", -1)])
-    await db.movie_views.create_index("viewed_at", expireAfterSeconds=2592000) # Auto deletes views older than 30 days
+    await db.movie_views.create_index("viewed_at", expireAfterSeconds=2592000)
 
 def validate_tg_data(init_data: str) -> bool:
     try:
@@ -397,7 +404,6 @@ async def start_cmd(message: types.Message, state: FSMContext):
             "🔸 অটো আপলোড: <code>/autoupload on/off</code>\n"
             "🔸 অ্যাডমিন প্যানেল: <code>/addadmin ID</code> | <code>/deladmin ID</code> | <code>/adminlist</code>\n"
             "🔸 ডাইরেক্ট লিংক: <code>/addlink লিংক</code> | <code>/dellink লিংক</code> | <code>/seelinks</code>\n"
-            "🔸 টেলিগ্রাম: <code>/settg লিংক</code> | 18+: <code>/set18 লিংক</code>\n"
             "🔸 সাপোর্ট লিংক: <code>/setsupport লিংক</code>\n"
             "🔸 পেমেন্ট নাম্বার: <code>/setbkash নাম্বার</code> | <code>/setnagad নাম্বার</code>\n"
             "🔸 প্রোটেকশন: <code>/protect on/off</code> | অটো-ডিলিট: <code>/settime [মিনিট]</code>\n"
@@ -480,15 +486,6 @@ async def set_nagad(m: types.Message):
         await m.answer(f"✅ নগদ নাম্বার সেট করা হয়েছে: <b>{num}</b>", parse_mode="HTML")
     except Exception: pass
 
-@dp.message(Command("settg"))
-async def set_tg_link(m: types.Message):
-    if m.from_user.id not in admin_cache: return
-    try:
-        link = m.text.split(" ")[1]
-        await db.settings.update_one({"id": "link_tg"}, {"$set": {"url": link}}, upsert=True)
-        await m.answer("✅ টেলিগ্রাম চ্যানেল লিংক আপডেট করা হয়েছে।")
-    except Exception: pass
-
 @dp.message(Command("setsupport"))
 async def set_support_link(m: types.Message):
     if m.from_user.id not in admin_cache: return
@@ -496,15 +493,6 @@ async def set_support_link(m: types.Message):
         link = m.text.split(" ")[1]
         await db.settings.update_one({"id": "link_support"}, {"$set": {"url": link}}, upsert=True)
         await m.answer("✅ সাপোর্ট লিংক আপডেট করা হয়েছে।")
-    except Exception: pass
-
-@dp.message(Command("set18"))
-async def set_18_link(m: types.Message):
-    if m.from_user.id not in admin_cache: return
-    try:
-        link = m.text.split(" ")[1]
-        await db.settings.update_one({"id": "link_18"}, {"$set": {"url": link}}, upsert=True)
-        await m.answer("✅ 18+ লিংক আপডেট করা হয়েছে।")
     except Exception: pass
 
 @dp.message(Command("protect"))
@@ -723,7 +711,7 @@ async def del_keyword_reply(m: types.Message):
         await m.answer("⚠️ সঠিক নিয়ম: <code>/delreply কিওয়ার্ড</code>", parse_mode="HTML")
 
 # ==========================================
-# 🛑 SMART AUTO-RESPONDER (Integrated with AI Folder)
+# 🛑 SMART AUTO-RESPONDER
 # ==========================================
 @dp.message(lambda m: m.chat.type == "private" and m.from_user.id not in admin_cache and (m.text is None or not m.text.startswith("/")))
 async def forward_to_admin(m: types.Message):
@@ -741,7 +729,7 @@ async def forward_to_admin(m: types.Message):
                 break
 
     if not is_manual_reply:
-        # 1. Forward to Admins only if not a manual keyword
+        # 1. Forward to Admins
         builder = InlineKeyboardBuilder()
         builder.button(text="✍️ রিপ্লাই দিন", callback_data=f"reply_{m.from_user.id}")
         markup = builder.as_markup()
@@ -759,7 +747,7 @@ async def forward_to_admin(m: types.Message):
                 )
             except Exception: pass
         
-        # 2. Smart AI Auto-Reply for User
+        # 2. Smart AI Auto-Reply
         if m.from_user.id not in auto_reply_cache:
             auto_reply_cache[m.from_user.id] = True
             try:
@@ -775,7 +763,7 @@ async def forward_to_admin(m: types.Message):
             except Exception as e: 
                 logger.error(f"Auto-Reply Error: {e}")
     else:
-        # 3. If Manual Reply, respond immediately and save to AI history
+        # 3. If Manual Reply
         if m.from_user.id not in auto_reply_cache:
             auto_reply_cache[m.from_user.id] = True
             try:
@@ -820,29 +808,29 @@ async def receive_movie_file(m: types.Message, state: FSMContext):
             [types.InlineKeyboardButton(text="➕ আগের সিরিজের নতুন এপিসোড", callback_data="upload_episode")]
         ]
         markup = types.InlineKeyboardMarkup(inline_keyboard=kb)
-        await m.answer("✅ ফাইল পেয়েছি! এটি কি নতুন কোনো মুভি নাকি আগের কোনো সিরিজের নতুন এপিসোড?", reply_markup=markup)
+        await m.answer("✅ ফাইল পেয়েছি! এটি কি নতুন মুভি নাকি আগের সিরিজের নতুন এপিসোড?", reply_markup=markup)
 
 @dp.callback_query(F.data == "upload_new")
 async def upload_new_cb(c: types.CallbackQuery, state: FSMContext):
     await state.set_state(AdminStates.waiting_for_photo)
-    await c.message.edit_text("✅ <b>নতুন মুভি/সিরিজ!</b>\nএবার মুভির <b>পোস্টার (Photo)</b> সেন্ধ করুন।", parse_mode="HTML")
+    await c.message.edit_text("✅ <b>নতুন মুভি/সিরিজ!</b>\nএবার মুভির <b>পোস্টার (Photo)</b> সেন্ড করুন।", parse_mode="HTML")
 
 @dp.callback_query(F.data == "upload_episode")
 async def upload_episode_cb(c: types.CallbackQuery, state: FSMContext):
     await state.set_state(AdminStates.waiting_for_series_search)
-    await c.message.edit_text("✅ <b>নতুন এপিসোড!</b>\n\nযে সিরিজে এড করতে চান, সেই <b>সিরিজের নামের কয়েক অক্ষর</b> লিখে রিপ্লাই দিন (যেমন: Farzi)।", parse_mode="HTML")
+    await c.message.edit_text("✅ <b>নতুন এপিসোড!</b>\n\nসিরিজের নামের কয়েক অক্ষর লিখে রিপ্লাই দিন (যেমন: Farzi)।", parse_mode="HTML")
 
 @dp.message(AdminStates.waiting_for_series_search, F.text)
 async def search_series_for_episode(m: types.Message, state: FSMContext):
     query = m.text.strip()
     pipeline = [
         {"$match": {"title": {"$regex": query, "$options": "i"}}},
-        {"$group": {"_id": "$title", "photo_id": {"$first": "$photo_id"}, "db_photo_id": {"$first": "$db_photo_id"}, "categories": {"$first": "$categories"}}},
+        {"$group": {"_id": "$title", "photo_id": {"$first": "$photo_id"}, "db_photo_id": {"$first": "$db_photo_id"}}},
         {"$limit": 10}
     ]
     results = await db.movies.aggregate(pipeline).to_list(10)
 
-    if not results: return await m.answer("⚠️ এই নামে কোনো serie পাওয়া যায়নি! আবার সঠিক নাম লিখে পাঠান।")
+    if not results: return await m.answer("⚠️ এই নামে কোনো সিরিজ পাওয়া যায়নি! আবার সঠিক নাম লিখে পাঠান।")
 
     await state.update_data(search_results=results)
     
@@ -858,7 +846,7 @@ async def selected_series_cb(c: types.CallbackQuery, state: FSMContext):
     data = await state.get_data()
     selected = data["search_results"][idx]
 
-    await state.update_data(title=selected["_id"], photo_id=selected["photo_id"], db_photo_id=selected.get("db_photo_id"), categories=selected.get("categories", []))
+    await state.update_data(title=selected["_id"], photo_id=selected["photo_id"], db_photo_id=selected.get("db_photo_id"))
     
     await state.set_state(AdminStates.waiting_for_episode_quality)
     await c.message.edit_text(f"✅ <b>{selected['_id']}</b> সিলেক্ট হয়েছে!\n\nএবার এই নতুন ফাইলের <b>এপিসোড নাম্বার বা কোয়ালিটি</b> লিখে পাঠান।", parse_mode="HTML")
@@ -869,18 +857,17 @@ async def finalize_new_episode(m: types.Message, state: FSMContext):
     data = await state.get_data()
     title = data["title"]
     photo_id = data["photo_id"]
-    categories = data.get("categories", [])
     
     await db.movies.insert_one({
         "title": title, "quality": quality, "photo_id": photo_id, 
         "file_id": data["file_id"], "file_type": data["file_type"],
         "db_file_id": data.get("db_file_id"), "db_photo_id": data.get("db_photo_id"),
-        "categories": categories, "clicks": 0, "created_at": datetime.datetime.utcnow()
+        "clicks": 0, "created_at": datetime.datetime.utcnow()
     })
     clear_app_cache() 
     
     await state.clear()
-    await m.answer(f"🎉 <b>{title} [{quality}]</b> সফলভাবে সিরিজে এড করা গঠন করা হয়েছে!", parse_mode="HTML")
+    await m.answer(f"🎉 <b>{title} [{quality}]</b> সফলভাবে সিরিজে এড করা হয়েছে!", parse_mode="HTML")
 
     if CHANNEL_ID:
         try:
@@ -891,8 +878,7 @@ async def finalize_new_episode(m: types.Message, state: FSMContext):
                 [types.InlineKeyboardButton(text="♻️ MOVIE REQUEST ♻️", url=REQUEST_LINK)]
             ]
             markup = types.InlineKeyboardMarkup(inline_keyboard=kb)
-            cat_display = ", ".join(categories) if categories else "N/A"
-            caption = (f"🔥 <b>নতুন এপিসোড যুক্ত হয়েছে!</b>\n\n📌 <b>টাইটেল:</b> {title}\n🏷 <b>এপিসোড/কোয়ালিটি:</b> {quality}\n🎭 <b>ক্যাটাগরি:</b> {cat_display}\n\n👇 <i>বট থেকে ভিডিওটি পেতে নিচের বাটনে ক্লিক করুন।</i>")
+            caption = (f"🔥 <b>নতুন এপিসোড যুক্ত হয়েছে!</b>\n\n📌 <b>টাইটেল:</b> {title}\n🏷 <b>এপিসোড/কোয়ালিটি:</b> {quality}\n\n👇 <i>বট থেকে ভিডিওটি পেতে নিচের বাটনে ক্লিক করুন।</i>")
             await bot.send_photo(chat_id=CHANNEL_ID, photo=photo_id, caption=caption, parse_mode="HTML", reply_markup=markup)
         except Exception: pass
 
@@ -941,15 +927,6 @@ async def receive_movie_title(m: types.Message, state: FSMContext):
 @dp.message(AdminStates.waiting_for_quality, F.text)
 async def receive_movie_quality(m: types.Message, state: FSMContext):
     await state.update_data(quality=m.text.strip())
-    await state.set_state(AdminStates.waiting_for_category)
-    await m.answer("✅ কোয়ালিটি সেভ হয়েছে!\n\nএবার মুভির <b>ক্যাটাগরি</b> লিখে পাঠান।\n<i>(একাধিক হলে কমা দিয়ে লিখুন। যেমন: Bangla Dub, Action, 18+)</i>\n\n<i>(ক্যাটাগরি না দিতে চাইলে 'Skip' লিখুন)</i>", parse_mode="HTML")
-
-@dp.message(AdminStates.waiting_for_category, F.text)
-async def receive_movie_category(m: types.Message, state: FSMContext):
-    cat_text = m.text.strip()
-    if cat_text.lower() in ['skip', 'none', 'no']: categories = []
-    else: categories = [cat.strip() for cat in cat_text.split(",") if cat.strip()]
-    
     data = await state.get_data()
     await state.clear()
     
@@ -961,13 +938,11 @@ async def receive_movie_category(m: types.Message, state: FSMContext):
         "title": title, "quality": quality, "photo_id": photo_id, 
         "file_id": data["file_id"], "file_type": data["file_type"],
         "db_file_id": data.get("db_file_id"), "db_photo_id": data.get("db_photo_id"),
-        "categories": categories,
         "clicks": 0, "created_at": datetime.datetime.utcnow()
     })
     clear_app_cache() 
     
-    cat_display = ", ".join(categories) if categories else "N/A"
-    await m.answer(f"🎉 <b>{title} [{quality}]</b> অ্যাপে যুক্ত করা গঠন করা হয়েছে!\n🏷 ক্যাটাগরি: <b>{cat_display}</b>", parse_mode="HTML")
+    await m.answer(f"🎉 <b>{title} [{quality}]</b> অ্যাপে যুক্ত করা হয়েছে!", parse_mode="HTML")
 
     if CHANNEL_ID:
         try:
@@ -978,7 +953,7 @@ async def receive_movie_category(m: types.Message, state: FSMContext):
                 [types.InlineKeyboardButton(text="♻️ MOVIE REQUEST ♻️", url=REQUEST_LINK)]
             ]
             markup = types.InlineKeyboardMarkup(inline_keyboard=kb)
-            caption = (f"🔥 <b>নতুন ফাইল যুক্ত হয়েছে!</b>\n\n📌 <b>টাইটেল:</b> {title}\n🏷 <b>কোয়ালিটি:</b> {quality}\n🎭 <b>ক্যাটাগরি:</b> {cat_display}\n\n👇 <i>বট থেকে ভিডিওটি পেতে নিচের বাটনে ক্লিক করুন।</i>")
+            caption = (f"🔥 <b>নতুন ফাইল যুক্ত হয়েছে!</b>\n\n📌 <b>টাইটেল:</b> {title}\n🏷 <b>কোয়ালিটি:</b> {quality}\n\n👇 <i>বট থেকে ভিডিওটি পেতে নিচের বাটনে ক্লিক করুন।</i>")
             await bot.send_photo(chat_id=CHANNEL_ID, photo=photo_id, caption=caption, parse_mode="HTML", reply_markup=markup)
         except Exception: pass
 
@@ -1064,11 +1039,11 @@ async def web_admin_panel(auth: bool = Depends(verify_admin)):
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Admin Panel - BD Viral Link</title>
+        <script src="https://tailwindbcss.com"></script>
         <script src="https://cdn.tailwindcss.com"></script>
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
         <style>
-            /* Custom glowing neon styles */
             .neon-card {
                 background: rgba(30, 41, 59, 0.7);
                 backdrop-filter: blur(10px);
@@ -1105,7 +1080,6 @@ async def web_admin_panel(auth: bool = Depends(verify_admin)):
             <!-- Tab Content: Dashboard & Analytics -->
             <div id="adminTab-dashboard" class="admin-tab-content">
                 <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8" id="statsBoard">
-                    <!-- Live Online Card -->
                     <div class="neon-card p-5 rounded-2xl border-l-4 border-green-500 flex items-center justify-between shadow-lg">
                         <div class="flex items-center gap-3">
                             <div class="bg-green-500/10 p-4 rounded-xl text-green-400 text-2xl relative">
@@ -1135,11 +1109,10 @@ async def web_admin_panel(auth: bool = Depends(verify_admin)):
                 </div>
 
                 <!-- Advanced Analytics widgets -->
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                    <!-- Engagement Analytics Card -->
-                    <div class="neon-card rounded-2xl p-6 shadow-xl col-span-1">
+                <div class="grid grid-cols-1 md:grid-cols-1 gap-6 mb-8">
+                    <div class="neon-card rounded-2xl p-6 shadow-xl">
                         <h2 class="text-lg font-bold text-gray-200 mb-4 flex items-center gap-2"><i class="fa-solid fa-chart-line text-blue-500"></i> Active Statistics</h2>
-                        <div class="grid grid-cols-1 gap-4">
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div class="bg-gray-900/50 p-4 rounded-xl border border-gray-800">
                                 <p class="text-xs text-gray-400 font-bold uppercase">Active Today (DAU)</p>
                                 <h3 id="analyticsDau" class="text-2xl font-bold text-green-400">0</h3>
@@ -1152,14 +1125,6 @@ async def web_admin_panel(auth: bool = Depends(verify_admin)):
                                 <p class="text-xs text-gray-400 font-bold uppercase">Total User Reviews</p>
                                 <h3 id="analyticsReviews" class="text-2xl font-bold text-yellow-400">0</h3>
                             </div>
-                        </div>
-                    </div>
-
-                    <!-- Category Popularity Interactive Chart -->
-                    <div class="neon-card rounded-2xl p-6 shadow-xl col-span-2">
-                        <h2 class="text-lg font-bold text-gray-200 mb-4 flex items-center gap-2"><i class="fa-solid fa-chart-bar text-purple-500"></i> Category Popularity Chart</h2>
-                        <div class="h-64 relative">
-                            <canvas id="categoryChart"></canvas>
                         </div>
                     </div>
                 </div>
@@ -1276,9 +1241,9 @@ async def web_admin_panel(auth: bool = Depends(verify_admin)):
                     <div class="overflow-x-auto">
                         <table class="w-full text-left text-sm whitespace-nowrap">
                             <thead class="bg-gray-700 text-gray-300">
-                                <tr><th class="p-4">Title</th><th class="p-4">Category</th><th class="p-4">Views</th><th class="p-4">Files</th><th class="p-4">Action</th></tr>
+                                <tr><th class="p-4">Title</th><th class="p-4">Views</th><th class="p-4">Files</th><th class="p-4">Action</th></tr>
                             </thead>
-                            <tbody id="movieTableBody"><tr><td colspan="5" class="text-center p-8 text-gray-400">Loading...</td></tr></tbody>
+                            <tbody id="movieTableBody"><tr><td colspan="4" class="text-center p-8 text-gray-400">Loading...</td></tr></tbody>
                         </table>
                     </div>
                     <div class="flex justify-center items-center gap-3 mt-6" id="adminPagination"></div>
@@ -1295,8 +1260,8 @@ async def web_admin_panel(auth: bool = Depends(verify_admin)):
                     <div class="bg-gray-900 p-4 rounded-lg border border-gray-700 mb-6">
                         <h3 class="text-gray-300 font-bold mb-3">Create Free Ad (Admin Only)</h3>
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
-                            <input type="text" id="adTitle" placeholder="Ad Title (e.g. Free Cashout)" class="w-full bg-gray-700 text-white px-3 py-2 rounded border border-gray-600 focus:outline-none">
-                            <input type="text" id="adSubtitle" placeholder="Ad Subtitle / Short Description" class="w-full bg-gray-700 text-white px-3 py-2 rounded border border-gray-600 focus:outline-none">
+                            <input type="text" id="adTitle" placeholder="Ad Title" class="w-full bg-gray-700 text-white px-3 py-2 rounded border border-gray-600 focus:outline-none">
+                            <input type="text" id="adSubtitle" placeholder="Ad Subtitle" class="w-full bg-gray-700 text-white px-3 py-2 rounded border border-gray-600 focus:outline-none">
                             <input type="text" id="adLink" placeholder="URL / Link" class="w-full bg-gray-700 text-white px-3 py-2 rounded border border-gray-600 focus:outline-none">
                             <input type="text" id="adImage" placeholder="Image URL (Optional)" class="w-full bg-gray-700 text-white px-3 py-2 rounded border border-gray-600 focus:outline-none">
                         </div>
@@ -1319,11 +1284,10 @@ async def web_admin_panel(auth: bool = Depends(verify_admin)):
                 <div class="neon-card rounded-2xl border border-gray-700 p-6 shadow mb-8">
                     <h2 class="text-xl font-bold text-gray-200 mb-4"><i class="fa-solid fa-reply text-green-500"></i> Auto-Reply Keyword Manager</h2>
                     
-                    <!-- Create new keyword form -->
                     <div class="bg-gray-900 p-4 rounded-lg border border-gray-700 mb-6">
                         <h3 class="text-gray-300 font-bold mb-3">Add Custom Keyword Reply</h3>
                         <div class="flex flex-col md:flex-row gap-3">
-                            <input type="text" id="kwInput" placeholder="Keyword (e.g. pushpa 2)" class="w-full bg-gray-700 text-white px-3 py-2 rounded border border-gray-600 focus:outline-none md:w-1/3">
+                            <input type="text" id="kwInput" placeholder="Keyword" class="w-full bg-gray-700 text-white px-3 py-2 rounded border border-gray-600 focus:outline-none md:w-1/3">
                             <input type="text" id="kwReplyInput" placeholder="Reply Message" class="w-full bg-gray-700 text-white px-3 py-2 rounded border border-gray-600 focus:outline-none flex-grow">
                             <button onclick="addKeywordReply()" class="bg-green-600 hover:bg-green-500 text-white px-6 py-2 rounded font-bold whitespace-nowrap">Add Rule</button>
                         </div>
@@ -1369,9 +1333,7 @@ async def web_admin_panel(auth: bool = Depends(verify_admin)):
             let currentPage = 1;
             let searchQuery = "";
             let searchTimeout = null;
-            let categoryChart = null;
 
-            // Admin Tabs switching logic
             function switchAdminTab(tabId) {
                 document.querySelectorAll('.admin-tab-content').forEach(content => content.classList.add('hidden'));
                 document.getElementById('adminTab-' + tabId).classList.remove('hidden');
@@ -1443,7 +1405,6 @@ async def web_admin_panel(auth: bool = Depends(verify_admin)):
                 } catch(e) {}
             }
 
-            // Advanced Analytics Dashboard Loader
             async function loadAnalytics() {
                 try {
                     const res = await fetch('/api/admin/analytics');
@@ -1454,37 +1415,6 @@ async def web_admin_panel(auth: bool = Depends(verify_admin)):
                     document.getElementById('analyticsWau').innerText = data.active_week;
                     document.getElementById('analyticsReviews').innerText = data.total_reviews;
 
-                    // Generate Interactive Category Chart
-                    const labels = data.category_stats.map(c => c._id);
-                    const counts = data.category_stats.map(c => c.total_views);
-
-                    if (categoryChart) categoryChart.destroy();
-                    const ctx = document.getElementById('categoryChart').getContext('2d');
-                    categoryChart = new Chart(ctx, {
-                        type: 'bar',
-                        data: {
-                            labels: labels,
-                            datasets: [{
-                                label: 'Views',
-                                data: counts,
-                                backgroundColor: 'rgba(139, 92, 246, 0.5)',
-                                borderColor: 'rgba(139, 92, 246, 1)',
-                                borderWidth: 1,
-                                borderRadius: 8
-                            }]
-                        },
-                        options: {
-                            responsive: true,
-                            maintainAspectRatio: false,
-                            plugins: { legend: { display: false } },
-                            scales: {
-                                y: { grid: { color: 'rgba(255, 255, 255, 0.05)' }, ticks: { color: '#94a3b8' } },
-                                x: { grid: { display: false }, ticks: { color: '#94a3b8' } }
-                            }
-                        }
-                    });
-
-                    // Top Rated Movies List UI
                     let ratedHtml = '';
                     data.top_rated.forEach(m => {
                         ratedHtml += `
@@ -1499,7 +1429,6 @@ async def web_admin_panel(auth: bool = Depends(verify_admin)):
                 } catch(e) { console.log(e); }
             }
 
-            // User Management Actions
             async function searchUsers() {
                 const query = document.getElementById('userSearchInput').value.trim();
                 const res = await fetch(`/api/admin/users/search?q=${encodeURIComponent(query)}`);
@@ -1571,26 +1500,20 @@ async def web_admin_panel(auth: bool = Depends(verify_admin)):
 
             async function loadAdminData(page = 1) {
                 currentPage = page;
-                document.getElementById('movieTableBody').innerHTML = '<tr><td colspan="5" class="text-center p-8 text-gray-400">Loading...</td></tr>';
+                document.getElementById('movieTableBody').innerHTML = '<tr><td colspan="4" class="text-center p-8 text-gray-400">Loading...</td></tr>';
                 const res = await fetch(`/api/admin/data?page=${currentPage}&q=${encodeURIComponent(searchQuery)}`); 
                 const data = await res.json();
                 
                 let html = '';
                 if(data.movies.length === 0) {
-                    html = '<tr><td colspan="5" class="text-center p-8 text-gray-400">No movies found.</td></tr>';
+                    html = '<tr><td colspan="4" class="text-center p-8 text-gray-400">No movies found.</td></tr>';
                 } else {
                     data.movies.forEach(m => {
-                        let catHtml = m.categories && m.categories.length > 0 
-                            ? m.categories.map(c => `<span class="bg-gray-750 px-2 py-1 rounded text-xs border border-gray-600">${c}</span>`).join(' ') 
-                            : '<span class="text-gray-500">None</span>';
-                        
                         html += `<tr class="border-b border-gray-700 hover:bg-gray-750">
                             <td class="p-4 font-medium">${m._id}</td>
-                            <td class="p-4">${catHtml}</td>
                             <td class="p-4 text-gray-400">${m.clicks} Views</td>
                             <td class="p-4 text-green-400 font-bold">${m.file_count}</td>
                             <td class="p-4 flex gap-2">
-                                <button onclick="editCategory('${encodeURIComponent(m._id)}', '${encodeURIComponent(JSON.stringify(m.categories || []))}')" class="text-blue-400 bg-blue-900 px-3 py-1 rounded transition hover:bg-blue-800">Edit Cat.</button>
                                 <button onclick="addViews('${encodeURIComponent(m._id)}')" class="text-yellow-400 bg-yellow-900 px-3 py-1 rounded transition hover:bg-yellow-800">Boost</button>
                                 <button onclick="deleteMovie('${encodeURIComponent(m._id)}')" class="text-red-400 bg-red-900 px-3 py-1 rounded transition hover:bg-red-800">Delete</button>
                             </td>
@@ -1608,19 +1531,6 @@ async def web_admin_panel(auth: bool = Depends(verify_admin)):
                 document.getElementById('adminPagination').innerHTML = pageHtml;
             }
 
-            async function editCategory(title, currentCatsJson) {
-                let currentCats = [];
-                try { currentCats = JSON.parse(decodeURIComponent(currentCatsJson)); } catch(e) {}
-                let currentCatStr = currentCats.join(", ");
-                
-                let newCatStr = prompt("Edit Categories (comma separated):", currentCatStr);
-                if(newCatStr !== null) {
-                    let newCategories = newCatStr.split(",").map(c => c.trim()).filter(c => c !== "");
-                    await fetch('/api/admin/movie/' + title, { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({new_categories: newCategories}) });
-                    loadAdminData(currentPage);
-                }
-            }
-
             async function deleteMovie(title) {
                 if(!confirm('Are you sure you want to delete ALL files for this movie?')) return;
                 await fetch('/api/admin/movie/' + title, {method: 'DELETE'}); 
@@ -1635,7 +1545,6 @@ async def web_admin_panel(auth: bool = Depends(verify_admin)):
                 }
             }
 
-            // --- Admin Ads Manager JS ---
             async function loadAds() {
                 const res = await fetch('/api/admin/ads_list');
                 const data = await res.json();
@@ -1673,7 +1582,6 @@ async def web_admin_panel(auth: bool = Depends(verify_admin)):
                 }
             }
 
-            // --- Keyword Manager Web JS ---
             async function loadKeywordList() {
                 try {
                     const res = await fetch('/api/admin/keywords');
@@ -1713,7 +1621,6 @@ async def web_admin_panel(auth: bool = Depends(verify_admin)):
                 }
             }
 
-            // --- Requests Manager Web JS ---
             async function loadAdminRequests() {
                 try {
                     const res = await fetch('/api/admin/requests');
@@ -1765,7 +1672,6 @@ async def web_admin_panel(auth: bool = Depends(verify_admin)):
             
             loadSysSettings(); loadStats(); loadAnalytics();
             
-            // Auto refresh live stats every 10 seconds
             setInterval(() => {
                 const activeTab = document.querySelector('.admin-tab-content:not(.hidden)');
                 if (activeTab && activeTab.id === 'adminTab-dashboard') {
@@ -1796,7 +1702,7 @@ async def get_admin_data(page: int = 1, q: str = "", auth: bool = Depends(verify
     
     pipeline = [
         {"$match": match_stage},
-        {"$group": {"_id": "$title", "clicks": {"$sum": "$clicks"}, "file_count": {"$sum": 1}, "created_at": {"$max": "$created_at"}, "categories": {"$first": "$categories"}}}, 
+        {"$group": {"_id": "$title", "clicks": {"$sum": "$clicks"}, "file_count": {"$sum": 1}, "created_at": {"$max": "$created_at"}}}, 
         {"$sort": {"created_at": -1}}, 
         {"$skip": skip}, 
         {"$limit": limit}
@@ -1818,28 +1724,21 @@ async def delete_movie_api(title: str, auth: bool = Depends(verify_admin)):
 async def edit_movie_api(title: str, data: dict = Body(...), auth: bool = Depends(verify_admin)):
     if add_clicks := data.get("add_clicks"):
         await db.movies.update_many({"title": title}, {"$inc": {"clicks": int(add_clicks)}})
-    if "new_categories" in data:
-        await db.movies.update_many({"title": title}, {"$set": {"categories": data["new_categories"]}})
     clear_app_cache() 
     return {"ok": True}
 
 @app.get("/", response_class=HTMLResponse)
 async def web_ui():
-    tg_cfg = await db.settings.find_one({"id": "link_tg"})
     support_cfg = await db.settings.find_one({"id": "link_support"})
-    b18_cfg = await db.settings.find_one({"id": "link_18"})
     dl_cfg = await db.settings.find_one({"id": "direct_links"})
     
     ad_time_cfg = await db.settings.find_one({"id": "ad_time"})
     ad_wait_seconds = ad_time_cfg['seconds'] if ad_time_cfg else 10
     
-    # Ad Interval configuration from DB
     interval_cfg = await db.settings.find_one({"id": "ad_interval"})
     ad_interval = interval_cfg["interval"] if interval_cfg else 3
     
-    tg_url = tg_cfg['url'] if tg_cfg else "https://t.me/MovieeBD"
     support_link = support_cfg['url'] if support_cfg else "https://t.me/YourSupportUsername"
-    link_18 = b18_cfg['url'] if b18_cfg else "https://t.me/MovieeBD"
     direct_links = dl_cfg.get('links', []) if dl_cfg else []
     dl_json = json.dumps(direct_links)
     
@@ -1870,7 +1769,7 @@ async def web_ui():
             .home-btn:active { transform: scale(0.95); background: rgba(59, 130, 246, 0.2); }
 
             .bottom-nav { position: fixed; bottom: 0; left: 0; width: 100%; background: rgba(15, 23, 42, 0.98); backdrop-filter: blur(15px); border-top: 1px solid #334155; display: flex; justify-content: space-around; align-items: center; padding: 10px 0; z-index: 2000; padding-bottom: calc(10px + env(safe-area-inset-bottom)); }
-            .nav-item { display: flex; flex-direction: column; align-items: center; justify-content: center; color: #94a3b8; font-size: 11px; font-weight: bold; cursor: pointer; transition: 0.2s; width: 20%; gap: 4px; }
+            .nav-item { display: flex; flex-direction: column; align-items: center; justify-content: center; color: #94a3b8; font-size: 11px; font-weight: bold; cursor: pointer; transition: 0.2s; width: 25%; gap: 4px; }
             .nav-item i { font-size: 20px; transition: transform 0.2s; }
             .nav-item.active { color: #38bdf8; }
             .nav-item.active i { transform: scale(1.15); }
@@ -1888,23 +1787,14 @@ async def web_ui():
 
             .search-box { padding: 15px; }
             .search-input { width: 100%; padding: 16px; border-radius: 25px; border: none; outline: none; text-align: center; background: #1e293b; color: #fff; font-size: 18px; font-weight: bold; }
-            
-            .category-container { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 15px 15px; justify-content: center; }
-            .cat-btn { background: rgba(30, 41, 59, 0.8); color: #cbd5e1; border: 1px solid #334155; padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: bold; cursor: pointer; transition: all 0.2s ease; backdrop-filter: blur(5px); white-space: nowrap; }
-            .cat-btn:active { transform: scale(0.95); }
-            .cat-btn.active { background: linear-gradient(45deg, #ef4444, #f97316); color: white; border-color: transparent; box-shadow: 0 2px 8px rgba(239, 68, 68, 0.4); }
 
             .section-title { padding: 5px 15px 15px; font-size: 20px; font-weight: 900; display: flex; align-items: center; gap: 8px; color:#ff416c; }
             
-            /* Enhanced Trending Container with CSS Scroll Snap to prevent stopping halfway */
             .trending-container { display: flex; overflow-x: auto; gap: 15px; padding: 0 15px 20px; scroll-behavior: smooth; scroll-snap-type: x mandatory; }
             .trending-container::-webkit-scrollbar { display: none; }
             .trending-card { min-width: 280px; max-width: 280px; background: transparent; overflow: hidden; cursor: pointer; flex-shrink: 0; position: relative; transition: transform 0.2s; transform: translateZ(0); will-change: transform; scroll-snap-align: start; }
             .trending-card:active { transform: scale(0.98); }
 
-            /* ==========================================================
-               ✨ NEW AD CAROUSEL (SWIPER) STYLES - SCREENSHOT REPLICATED
-               ========================================================== */
             .ad-carousel-container {
                 width: 100%;
                 margin: 5px 0 15px 0;
@@ -1919,10 +1809,10 @@ async def web_ui():
                 gap: 12px;
                 width: 100%;
                 padding: 10px 0;
-                scrollbar-width: none; /* Firefox */
+                scrollbar-width: none;
             }
             .ad-carousel-track::-webkit-scrollbar {
-                display: none; /* Chrome/Safari */
+                display: none;
             }
             .ad-carousel-card {
                 min-width: 250px;
@@ -1955,10 +1845,10 @@ async def web_ui():
             }
             .ad-carousel-body {
                 padding: 12px 15px 15px 15px;
-                text-align: left; /* Left Aligned as per Screenshot */
+                text-align: left;
                 display: flex;
                 flex-direction: column;
-                align-items: flex-start; /* Left Aligned items */
+                align-items: flex-start;
                 gap: 4px;
                 background: #ffffff;
             }
@@ -2052,7 +1942,6 @@ async def web_ui():
             .dev-btn:active { transform: scale(0.95); }
 
             .floating-btn { position: fixed; right: 15px; color: white; width: 48px; height: 48px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; z-index: 500; cursor: pointer; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
-            .btn-18 { bottom: 205px; background: linear-gradient(45deg, #ff0000, #990000); font-weight: bold; font-size: 16px; border: 2px solid white; }
             .btn-tg { bottom: 145px; background: linear-gradient(45deg, #24A1DE, #1b7ba8); }
             .btn-req { bottom: 85px; background: linear-gradient(45deg, #10b981, #059669); }
 
@@ -2073,11 +1962,9 @@ async def web_ui():
             .big-processing-text { font-size: 26px; font-weight: 900; color: #4ade80; animation: pulse 1.5s infinite; }
             @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
             
-            /* Enhanced Spin Wheel graphics Styles */
             .wheel-slice { position: absolute; width: 50%; height: 50%; transform-origin: 100% 100%; }
             .spin-win-anim { animation: spin-stop-effect 4s cubic-bezier(0.25, 0.1, 0.25, 1) forwards; }
             
-            /* 🛑 NEW: Splash Screen Keyframe Styles */
             @keyframes spinRing {
                 100% { transform: rotate(360deg); }
             }
@@ -2088,7 +1975,7 @@ async def web_ui():
         </style>
     </head>
     <body onclick="closeMenu(event)">
-        <!-- 🛑 Startup Splash Screen -->
+        <!-- Startup Splash Screen -->
         <div id="startupSplash" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #0f172a; z-index: 999999; display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 1; visibility: visible; transition: opacity 0.8s ease, visibility 0.8s ease;">
             <div style="position: relative; width: 160px; height: 160px; display: flex; align-items: center; justify-content: center; margin-bottom: 25px;">
                 <div style="position: absolute; width: 100%; height: 100%; border-radius: 50%; background: conic-gradient(#ff0000, #ff7300, #fffb00, #48ff00, #00ffd5, #002bff, #7a00ff, #ff00c8, #ff0000); animation: spinRing 3s linear infinite; filter: blur(8px); opacity: 0.85;"></div>
@@ -2128,7 +2015,6 @@ async def web_ui():
             <a onclick="openAdCampModal()"><i class="fa-solid fa-bullhorn text-yellow-400"></i> Promote Channel/Web</a>
             <div style="height: 1px; background: #334155; margin: 4px 0;"></div>
             <a onclick="tg.showAlert(`How to Download:\n1. Click the Download button.\n2. Wait for ${AD_WAIT_TIME} seconds on the opened link.\n3. Return to the mini app and the video will be automatically sent to your bot inbox!`)"><i class="fa-solid fa-circle-question text-red-400"></i> How to Download</a>
-            <a onclick="window.open('{{TG_LINK}}')"><i class="fa-solid fa-bullhorn text-green-400"></i> Our Channel</a>
             <a onclick="window.open('{{SUPPORT_LINK}}')"><i class="fa-brands fa-telegram text-blue-400"></i> Support / Contact</a>
             
             <a onclick="window.open(window.location.origin + '/admin', '_blank')" id="adminMenuBtn" style="display: none; color: #ef4444;"><i class="fa-solid fa-screwdriver-wrench"></i> Admin Panel</a>
@@ -2137,8 +2023,6 @@ async def web_ui():
         <div class="search-box">
             <input type="text" id="searchInput" class="search-input" placeholder="🔍 Search Movies or Series...">
         </div>
-
-        <div id="categoryBox" class="category-container"></div>
 
         <div id="trendingWrapper">
             <div class="section-title"><i class="fa-solid fa-bolt text-yellow-400"></i>Trending now</div>
@@ -2160,8 +2044,7 @@ async def web_ui():
             </button>
         </div>
 
-        <div class="floating-btn btn-18" onclick="window.open('{{LINK_18}}')">18+</div>
-        <div class="floating-btn btn-tg" onclick="window.open('{{TG_LINK}}')"><i class="fa-brands fa-telegram"></i></div>
+        <div class="floating-btn btn-tg" onclick="window.open('https://t.me/MovieeBD')"><i class="fa-brands fa-telegram"></i></div>
         <div class="floating-btn btn-req" onclick="openRequestsTrackerModal()"><i class="fa-solid fa-code-pull-request"></i></div>
 
         <div class="bottom-nav">
@@ -2172,10 +2055,6 @@ async def web_ui():
             <div class="nav-item" id="navSearch" onclick="focusSearch()">
                 <i class="fa-solid fa-magnifying-glass"></i>
                 <span>Search</span>
-            </div>
-            <div class="nav-item" id="navUpcoming" onclick="window.location.href='/upcoming'">
-                <i class="fa-solid fa-calendar-days"></i>
-                <span>Upcoming</span>
             </div>
             <div class="nav-item" id="navVip" onclick="openVipModal()">
                 <i class="fa-solid fa-gem"></i>
@@ -2247,7 +2126,6 @@ async def web_ui():
                 <div style="display: flex; gap: 5px; margin-bottom: 15px; border-bottom: 1px solid #334155; padding-bottom: 8px;">
                     <button class="cat-btn active" id="btnTabVip" onclick="switchVipModalTab('vip')">💎 VIP & Buy</button>
                     <button class="cat-btn" id="btnTabSpin" onclick="switchVipModalTab('spin')">🎡 Lucky Spin</button>
-                    <button class="cat-btn" id="btnTabLeader" onclick="switchVipModalTab('leader')">🏆 Leaders</button>
                 </div>
 
                 <div id="modalTabVipContent">
@@ -2297,13 +2175,6 @@ async def web_ui():
                         🎡 Spin (Cost: 5 Points)
                     </button>
                 </div>
-
-                <div id="modalTabLeaderContent" style="display: none;">
-                    <h2 style="color:#60a5fa; font-size: 22px; margin-bottom:12px;"><i class="fa-solid fa-trophy"></i> Referrers Leaderboard</h2>
-                    <p style="color:#94a3b8; font-size:12px; margin-bottom:15px;">Top referrers ranking. Refer friends and reach the top!</p>
-                    
-                    <div id="leaderboardList" style="text-align: left; display: flex; flex-direction: column; gap: 8px; max-height: 250px; overflow-y: auto;"></div>
-                </div>
             </div>
         </div>
 
@@ -2332,7 +2203,7 @@ async def web_ui():
             <div class="modal-content">
                 <div class="close-icon" onclick="document.getElementById('requestsTrackerModal').style.display='none'"><i class="fa-solid fa-xmark"></i></div>
                 <h2 style="color:#10b981; font-size: 22px; margin-bottom:10px;"><i class="fa-solid fa-code-pull-request"></i> Movie Request Status</h2>
-                <p style="color:#cbd5e1; font-size:13px; margin-bottom:15px;">Submit and track the processing status of your requested movies!</p>
+                <p style="color:#cbd5e1; font-size:13px; margin-bottom:15px;">Submit and track requested movies!</p>
                 
                 <div style="display:flex; gap:10px; margin-bottom: 20px;">
                     <input type="text" id="reqTrackerInput" class="search-input" style="border-radius:12px; text-align:left; padding:10px 15px; font-size:15px;" placeholder="Enter Movie/Series name...">
@@ -2349,8 +2220,8 @@ async def web_ui():
                 <h2 style="color:#fcd34d; font-size: 22px; margin-bottom:10px;"><i class="fa-solid fa-bullhorn"></i> Promote Channel</h2>
                 <p style="color:#cbd5e1; font-size:13px; margin-bottom:15px;">Run your advertisement in front of thousands of users!</p>
                 
-                <input type="text" id="campTitle" class="search-input" style="border-radius:10px; margin-bottom:10px; font-size:15px;" placeholder="Ad Title (e.g. Join Best Movie Bot)">
-                <input type="text" id="campSubtitle" class="search-input" style="border-radius:10px; margin-bottom:10px; font-size:15px;" placeholder="Ad Subtitle (e.g. একদম ফ্রি।)">
+                <input type="text" id="campTitle" class="search-input" style="border-radius:10px; margin-bottom:10px; font-size:15px;" placeholder="Ad Title">
+                <input type="text" id="campSubtitle" class="search-input" style="border-radius:10px; margin-bottom:10px; font-size:15px;" placeholder="Ad Subtitle">
                 <input type="url" id="campLink" class="search-input" style="border-radius:10px; margin-bottom:10px; font-size:15px;" placeholder="https://t.me/yourlink">
                 <input type="url" id="campImg" class="search-input" style="border-radius:10px; margin-bottom:15px; font-size:15px;" placeholder="Image URL (Optional)">
                 
@@ -2373,7 +2244,7 @@ async def web_ui():
             const INIT_DATA = tg.initData || "";
             const BOT_UNAME = "{{BOT_USER}}";
             const AD_WAIT_TIME = {{AD_TIME}}; 
-            const AD_INTERVAL = {{AD_INTERVAL}}; // Dynamic interval configured from admin settings
+            const AD_INTERVAL = {{AD_INTERVAL}};
             
             let uid = tg.initDataUnsafe?.user?.id || 0;
             let isUserVip = false;
@@ -2381,7 +2252,6 @@ async def web_ui():
             let loadedMovies = {}; 
             let currentPage = 1; 
             let searchQuery = "";
-            let activeCategory = "";
             let autoScrollInterval;
             let activeAds = [];
             
@@ -2442,9 +2312,6 @@ async def web_ui():
                 } catch(e) {}
             }
 
-            /* ==========================================================
-               ✨ NEW: RENDER COMPACT SWIPER AD CARDS - SCREENSHOT STYLE
-               ========================================================== */
             function getAdCarouselHTML(indexId) {
                 if(activeAds.length === 0) return '';
                 let sliderId = "slider_" + indexId;
@@ -2480,12 +2347,10 @@ async def web_ui():
                 </div>`;
             }
 
-            // Sync indicators dynamically upon swiping
             function syncAdDots(sliderId, totalAds) {
                 const track = document.getElementById('track_' + sliderId);
                 if(!track) return;
                 let scrollPos = track.scrollLeft;
-                // Calculate based on custom card width (250px + 12px gap)
                 let activeIdx = Math.round(scrollPos / 262);
                 
                 if (activeIdx >= totalAds) activeIdx = totalAds - 1;
@@ -2502,7 +2367,7 @@ async def web_ui():
 
             function toggleMenu(e) { 
                 e.stopPropagation(); 
-                setNavActive(4);
+                setNavActive(3);
                 const m = document.getElementById('dropdownMenu'); 
                 m.style.display = m.style.display === 'block' ? 'none' : 'block'; 
             }
@@ -2515,10 +2380,6 @@ async def web_ui():
                 setNavActive(0);
                 document.getElementById('searchInput').value = ""; 
                 searchQuery = ""; 
-                activeCategory = "";
-                document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
-                let firstCatBtn = document.querySelector('.cat-btn');
-                if(firstCatBtn) firstCatBtn.classList.add('active');
                 
                 document.getElementById('trendingWrapper').style.display = 'block';
                 loadTrending();
@@ -2535,7 +2396,7 @@ async def web_ui():
             }
             
             function openVipModal() { 
-                setNavActive(3);
+                setNavActive(2);
                 switchVipModalTab('vip');
                 document.getElementById('vipModal').style.display = 'flex'; 
                 history.pushState({modal: 'vipModal'}, "");
@@ -2546,13 +2407,9 @@ async def web_ui():
             function switchVipModalTab(tab) {
                 document.getElementById('modalTabVipContent').style.display = tab === 'vip' ? 'block' : 'none';
                 document.getElementById('modalTabSpinContent').style.display = tab === 'spin' ? 'block' : 'none';
-                document.getElementById('modalTabLeaderContent').style.display = tab === 'leader' ? 'none' : 'none';
                 
                 document.getElementById('btnTabVip').className = tab === 'vip' ? 'cat-btn active' : 'cat-btn';
                 document.getElementById('btnTabSpin').className = tab === 'spin' ? 'cat-btn active' : 'cat-btn';
-                document.getElementById('btnTabLeader').className = tab === 'leader' ? 'cat-btn active' : 'cat-btn';
-
-                if (tab === 'leader') { renderLeaderboard(); }
             }
 
             function openReferModal() { 
@@ -2771,28 +2628,6 @@ async def web_ui():
                 } catch(e) { isSpinning = false; }
             }
 
-            async function renderLeaderboard() {
-                try {
-                    const res = await fetch('/api/gamification/leaderboard');
-                    const d = await res.json();
-                    let html = '';
-                    d.leaderboard.forEach((user, idx) => {
-                        let rankMedal = idx === 0 ? "🥇" : idx === 1 ? "🥈" : idx === 2 ? "🥉" : `[${idx+1}]`;
-                        html += `
-                        <div style="background: rgba(30,41,59,0.5); padding: 10px 15px; border-radius: 12px; border:1px solid #334155; display:flex; justify-content:space-between; align-items:center;">
-                            <div style="display:flex; align-items:center; gap: 10px;">
-                                <span style="font-size:16px;">${rankMedal}</span>
-                                <span style="font-weight:bold; color:white;">${user.name}</span>
-                            </div>
-                            <div style="text-align:right;">
-                                <span style="color:#fbbf24; font-weight:bold; font-size:13px;"><i class="fa-solid fa-share-nodes"></i> ${user.refer_count} Ref</span>
-                            </div>
-                        </div>`;
-                    });
-                    document.getElementById('leaderboardList').innerHTML = html || '<p class="text-gray-500">No leaderboard entries.</p>';
-                } catch(e) {}
-            }
-
             function openRequestsTrackerModal() {
                 document.getElementById('requestsTrackerModal').style.display = 'flex';
                 history.pushState({modal: 'requestsTrackerModal'}, "");
@@ -2843,8 +2678,6 @@ async def web_ui():
                 } catch(e) {}
             }
 
-            function openReqModal() { openRequestsTrackerModal(); }
-
             function openAdCampModal() {
                 document.getElementById('adCampModal').style.display = 'flex';
                 history.pushState({modal: 'adCampModal'}, "");
@@ -2886,33 +2719,8 @@ async def web_ui():
                 }
             }
 
-            async function sendReq() {
-                submitReqTracker();
-            }
-
             function formatViews(n) { if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M'; if (n >= 1000) return (n / 1000).toFixed(1) + 'K'; return n; }
             function makeSafeId(str) { return str.replace(/[^a-zA-Z0-9]/g, '_'); }
-
-            async function loadCategories() {
-                try {
-                    const res = await fetch('/api/categories');
-                    const cats = await res.json();
-                    if(cats.length === 0) return;
-                    let html = `<button class="cat-btn active" onclick="setCategory('', this)">All</button>`;
-                    cats.forEach(c => { html += `<button class="cat-btn" onclick="setCategory('${c.replace(/'/g, "\\'")}', this)">${c}</button>`; });
-                    document.getElementById('categoryBox').innerHTML = html;
-                } catch(e) {}
-            }
-
-            function setCategory(cat, btnElement) {
-                activeCategory = cat;
-                document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
-                btnElement.classList.add('active');
-                searchQuery = ""; 
-                document.getElementById('searchInput').value = "";
-                document.getElementById('trendingWrapper').style.display = cat === "" ? 'block' : 'none';
-                loadMovies(1);
-            }
 
             function startAutoScroll() {
                 if(autoScrollInterval) clearInterval(autoScrollInterval);
@@ -2955,7 +2763,7 @@ async def web_ui():
                 const grid = document.getElementById('movieGrid');
                 grid.innerHTML = "<p style='color:white; text-align:center;'>Loading...</p>";
                 try {
-                    const r = await fetch(`/api/list?page=${currentPage}&q=${encodeURIComponent(searchQuery)}&uid=${uid}&cat=${encodeURIComponent(activeCategory)}`);
+                    const r = await fetch(`/api/list?page=${currentPage}&q=${encodeURIComponent(searchQuery)}&uid=${uid}`);
                     const data = await r.json();
                     if(data.movies.length === 0) return grid.innerHTML = `<p style='text-align:center; color:#fbbf24;'>No movies found!</p>`;
                     
@@ -2976,7 +2784,6 @@ async def web_ui():
                         </div>`;
                         htmlContent += cardHtml;
                         
-                        // ⚙️ SEQUENTIALLY INJECT COMPACT MULTI CAROUSEL CARD AFTER EVERY 'N' MOVIES
                         let visualIndex = index + 1;
                         if (activeAds.length > 0 && visualIndex % AD_INTERVAL === 0) {
                             htmlContent += getAdCarouselHTML(visualIndex);
@@ -3008,7 +2815,6 @@ async def web_ui():
                 searchQuery = e.target.value.trim();
                 
                 const elementsToToggle = [
-                    document.getElementById('categoryBox'),
                     document.getElementById('trendingWrapper'),
                     document.getElementById('recentTitle'),
                     document.getElementById('communityBox'),
@@ -3017,11 +2823,8 @@ async def web_ui():
 
                 if(searchQuery !== "") { 
                     elementsToToggle.forEach(el => { if(el) el.style.display = 'none'; });
-                    activeCategory = ""; 
-                    document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active')); 
                 } 
                 else { 
-                    if(document.getElementById('categoryBox')) document.getElementById('categoryBox').style.display = 'flex';
                     if(document.getElementById('trendingWrapper')) document.getElementById('trendingWrapper').style.display = 'block';
                     if(document.getElementById('recentTitle')) document.getElementById('recentTitle').style.display = 'flex';
                     if(document.getElementById('communityBox')) document.getElementById('communityBox').style.display = 'block';
@@ -3389,7 +3192,6 @@ async def web_ui():
                     await Promise.all([
                         fetchUserInfo(),
                         fetchActiveAds(),
-                        loadCategories(),
                         loadTrending(),
                         loadMovies(1)
                     ]);
@@ -3404,7 +3206,7 @@ async def web_ui():
     </body>
     </html>
     """
-    html_code = html_code.replace("{{DIRECT_LINKS}}", dl_json).replace("{{TG_LINK}}", tg_url).replace("{{SUPPORT_LINK}}", support_link).replace("{{LINK_18}}", link_18).replace("{{BOT_USER}}", BOT_USERNAME).replace("{{AD_TIME}}", str(ad_wait_seconds)).replace("{{AD_INTERVAL}}", str(ad_interval)).replace("{{SOCIAL_LINKS}}", social_json)
+    html_code = html_code.replace("{{DIRECT_LINKS}}", dl_json).replace("{{SUPPORT_LINK}}", support_link).replace("{{BOT_USER}}", BOT_USERNAME).replace("{{AD_TIME}}", str(ad_wait_seconds)).replace("{{AD_INTERVAL}}", str(ad_interval)).replace("{{SOCIAL_LINKS}}", social_json)
     return html_code
 
 # ==========================================
@@ -3518,17 +3320,8 @@ async def trending_movies(uid: int = 0):
         for f in m["files"]: f["is_unlocked"] = f["id"] in unlocked_ids
     return movies
 
-@app.get("/api/categories")
-async def get_categories():
-    if "all_cats" in category_cache:
-        return category_cache["all_cats"]
-    categories = await db.movies.distinct("categories")
-    result = [c for c in categories if c]
-    category_cache["all_cats"] = result
-    return result
-
 @app.get("/api/list")
-async def list_movies(page: int = 1, q: str = "", uid: int = 0, cat: str = ""):
+async def list_movies(page: int = 1, q: str = "", uid: int = 0):
     unlocked_ids = []
     cfg_unlock = await db.settings.find_one({"id": "unlock_hours"})
     unlock_hrs = cfg_unlock['hours'] if cfg_unlock else 24
@@ -3537,7 +3330,7 @@ async def list_movies(page: int = 1, q: str = "", uid: int = 0, cat: str = ""):
         async for u in db.user_unlocks.find({"user_id": uid, "unlocked_at": {"$gt": time_limit}}):
             unlocked_ids.append(u["movie_id"])
 
-    cache_key = f"{page}_{q}_{cat}"
+    cache_key = f"{page}_{q}"
     if cache_key in list_cache:
         data = copy.deepcopy(list_cache[cache_key])
         movies = data["movies"]
@@ -3547,7 +3340,6 @@ async def list_movies(page: int = 1, q: str = "", uid: int = 0, cat: str = ""):
         skip = (page - 1) * limit
         match_stage = {}
         if q: match_stage["title"] = {"$regex": q, "$options": "i"}
-        if cat: match_stage["categories"] = cat
 
         pipeline = [
             {"$match": match_stage},
@@ -3813,13 +3605,6 @@ async def spin_wheel(d: UserActionModel):
         msg = "Congratulations! You won 1 Day VIP Pass!"
     return {"ok": True, "reward": reward, "msg": msg}
 
-@app.get("/api/gamification/leaderboard")
-async def get_leaderboard():
-    tops = await db.users.find().sort("refer_count", -1).limit(10).to_list(10)
-    lead = []
-    for u in tops: lead.append({"name": u.get("first_name", "User"), "refer_count": u.get("refer_count", 0), "coins": u.get("coins", 0)})
-    return {"leaderboard": lead}
-
 @app.get("/api/requests/user_list/{uid}")
 async def user_requests(uid: int):
     reqs = await db.requests.find({"user_id": uid}).sort("created_at", -1).to_list(50)
@@ -3910,7 +3695,7 @@ async def get_analytics(auth: bool = Depends(verify_admin)):
     live = await db.users.count_documents({"last_active": {"$gte": now - datetime.timedelta(minutes=5)}})
     a_t = await db.user_unlocks.distinct("user_id", {"unlocked_at": {"$gte": t_start}})
     a_w = await db.user_unlocks.distinct("user_id", {"unlocked_at": {"$gte": seven_d}})
-    c_s = await db.movies.aggregate([{"$unwind": "$categories"}, {"$group": {"_id": "$categories", "total_views": {"$sum": "$clicks"}}}, {"$sort": {"total_views": -1}}, {"$limit": 5}]).to_list(5)
+    c_s = []  # Category রিমুভ করায় এটি খালি রাখা হলো যেন কোনো এরর না আসে
     t_r = await db.reviews.aggregate([{"$group": {"_id": "$movie_title", "avg_rating": {"$avg": "$rating"}, "total_reviews": {"$sum": 1}}}, {"$sort": {"avg_rating": -1, "total_reviews": -1}}, {"$limit": 5}]).to_list(5)
     return {"live_online": live, "active_today": len(a_t), "active_week": len(a_w), "total_reviews": await db.reviews.count_documents({}), "total_requests": await db.requests.count_documents({}), "pending_requests": await db.requests.count_documents({"status": "pending"}), "category_stats": c_s, "top_rated": t_r}
 
