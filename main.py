@@ -13,6 +13,8 @@ import html
 import logging
 import glob
 import random
+# 🌐 নেটওয়ার্ক গেটওয়ের জন্য প্রক্সি লাইব্রেরি ইম্পোর্ট করা হলো
+import httpx 
 from PIL import Image, ImageFilter
 
 # ==========================================
@@ -31,7 +33,8 @@ except RuntimeError:
 # ==========================================
 
 from fastapi import FastAPI, Body, Request, Depends, HTTPException, status
-from fastapi.responses import HTMLResponse, StreamingResponse
+# 🌐 JSONResponse ইম্পোর্ট তালিকায় যুক্ত করা হলো
+from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
@@ -1001,6 +1004,61 @@ async def send_reply(m: types.Message, state: FSMContext):
         await m.answer("✅ ইউজারকে রিপ্লাই পাঠানো হয়েছে!")
     except Exception: await m.answer("⚠️ রিপ্লাই পাঠানো যায়নি!")
 
+# ==========================================
+# 🌐 NETWORK GATEWAY & REVERSE PROXY SYSTEM (Direct Integration)
+# ==========================================
+FALLBACK_GATEWAYS = [
+    "https://workers.cloudflare.com",
+    "https://vercel.live",
+    "https://pages.dev"
+]
+
+@app.get("/gateway/dns-check")
+async def check_network_status(request: Request):
+    """
+    ইউজারের লোকাল নেটওয়ার্ক কানেকশন টেস্ট করার এন্ডপয়েন্ট।
+    """
+    return {
+        "status": "online",
+        "message": "Gateway Connection Successful",
+        "client_ip": request.client.host if request.client else "Unknown",
+        "suggested_gateways": FALLBACK_GATEWAYS
+    }
+
+@app.api_route("/gateway/proxy/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
+async def reverse_proxy_gateway(request: Request, path: str):
+    """
+    রিভার্স প্রক্সি টানেল যা যেকোনো ব্লকড রিকোয়েস্টকে ব্যাকএন্ডে রি-রুট করে।
+    """
+    target_url = f"http://127.0.0.1:8000/{path}" 
+    headers = dict(request.headers)
+    headers.pop("host", None)
+    
+    async with httpx.AsyncClient() as client:
+        try:
+            content = await request.body()
+            response = await client.request(
+                method=request.method,
+                url=target_url,
+                headers=headers,
+                params=request.query_params,
+                content=content,
+                timeout=12.0
+            )
+            return Response(
+                content=response.content,
+                status_code=response.status_code,
+                headers=dict(response.headers)
+            )
+        except Exception as e:
+            return JSONResponse(
+                status_code=502,
+                content={"error": "Gateway Timeout", "details": str(e)}
+            )
+
+# ==========================================
+# 8. Optimized APIs
+# ==========================================
 @app.get("/api/admin/sys_settings")
 async def get_sys_settings(auth: bool = Depends(verify_admin)):
     cost_cfg = await db.settings.find_one({"id": "vip_cost"})
@@ -2043,6 +2101,9 @@ async def web_ui():
                 <i class="fa-brands fa-telegram"></i> Contact Developer
             </button>
         </div>
+
+        <div class="floating-btn btn-tg" onclick="window.open('https://t.me/MovieeBD')"><i class="fa-brands fa-telegram"></i></div>
+        <div class="floating-btn btn-req" onclick="openRequestsTrackerModal()"><i class="fa-solid fa-code-pull-request"></i></div>
 
         <div class="floating-btn btn-tg" onclick="window.open('https://t.me/MovieeBD')"><i class="fa-brands fa-telegram"></i></div>
         <div class="floating-btn btn-req" onclick="openRequestsTrackerModal()"><i class="fa-solid fa-code-pull-request"></i></div>
