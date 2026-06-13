@@ -11,3 +11,4 @@ cachetools
 google-generativeai
 pytz
 rapidfuzz
+httpx
