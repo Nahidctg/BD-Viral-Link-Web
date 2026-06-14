@@ -347,10 +347,10 @@ def validate_tg_data(init_data: str) -> bool:
 def verify_admin(credentials: HTTPBasicCredentials = Depends(security)):
     correct_username = secrets.compare_digest(credentials.username, "admin")
     correct_password = secrets.compare_digest(credentials.password, ADMIN_PASS)
-    if not (correct_username and open_admin_panel):
+    if not (correct_username and correct_password):  # 👈 এখানে 'correct_password' হবে
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect Info", headers={"WWW-Authenticate": "Basic"})
     return True
-
+    
 async def auto_delete_worker():
     while True:
         try:
